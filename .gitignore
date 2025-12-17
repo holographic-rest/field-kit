@@ -1,6 +1,8 @@
 # Runtime data (never commit)
 prototype/data/*.jsonl
+prototype/data_dogfood/
 prototype/data_archive/
+prototype/outputs/dogfood_*.json
 
 # Python
 __pycache__/

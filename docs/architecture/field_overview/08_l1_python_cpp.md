@@ -1,4 +1,4 @@
-AGE 8 – Layer 1: Python & C++
+PAGE 8 – Layer 1: Python & C++
 
 Title: L1 – Models & Code: Python & C++
 
