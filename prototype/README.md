@@ -236,3 +236,83 @@ You are done when:
 - Objects + events match specs (names, fields, ordering)
 - Ledger can verify lineage + credits deltas
 - v0.1 non-goals are not violated
+
+---
+
+## Running the Prototype
+
+### Golden Flow (Acceptance Test)
+
+```bash
+# Fresh run (recommended)
+python3 prototype/scripts/run_golden_flow.py --fresh
+
+# Re-run with existing data
+python3 prototype/scripts/run_golden_flow.py
+```
+
+### Sprint B: Dogfood (Architecture Ingestion)
+
+```bash
+# Fresh run
+python3 prototype/scripts/run_sprint_b_dogfood.py --fresh
+
+# With custom data directory
+FIELDKIT_DATA_DIR=prototype/data_dogfood python3 prototype/scripts/ingest_architecture_pages.py
+```
+
+### Separate Data Directories
+
+Use `FIELDKIT_DATA_DIR` to isolate test runs:
+
+```bash
+FIELDKIT_DATA_DIR=/tmp/field-kit-test python3 prototype/scripts/run_golden_flow.py
+```
+
+Or use `--data-dir`:
+
+```bash
+python3 prototype/scripts/run_golden_flow.py --data-dir /tmp/test
+```
+
+---
+
+## Test Scripts
+
+| Script | Description |
+|--------|-------------|
+| `run_golden_flow.py` | Acceptance test (credits=73) |
+| `run_golden_flow_3x.py` | Repeatability test (3 runs) |
+| `run_sprint_b_dogfood.py` | Architecture pages ingestion |
+| `test_sprint_c_canon.py` | Canon Policy tests |
+| `test_sprint_d_spin_recipes.py` | Spin Recipes tests |
+| `test_sprint_e_stability.py` | Forced failure + refund tests |
+| `validate_architecture_pages.py` | Page format validator |
+
+### Run All Tests
+
+```bash
+python3 prototype/scripts/run_golden_flow.py --fresh
+python3 prototype/scripts/run_sprint_b_dogfood.py --fresh
+python3 prototype/scripts/test_sprint_c_canon.py
+python3 prototype/scripts/test_sprint_d_spin_recipes.py
+python3 prototype/scripts/test_sprint_e_stability.py
+```
+
+---
+
+## Data Directory Structure
+
+```
+prototype/data/          # Default JSONL store (gitignored)
+├── networks.jsonl
+├── episodes.jsonl
+├── items.jsonl
+├── bonds.jsonl
+└── qdpi_events.jsonl    # Append-only event log
+
+prototype/data_dogfood/  # Dogfood data (gitignored)
+prototype/outputs/       # Export files (gitignored)
+```
+
+All runtime data is gitignored. Never commit JSONL files.
