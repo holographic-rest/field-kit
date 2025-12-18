@@ -14,9 +14,24 @@ from .schemas import (
     CANONICAL_EVENT_NAMES,
 )
 
-from .store_jsonl import Store, get_store, reset_store, dict_to_item, dict_to_bond
+from .store_jsonl import Store, get_store, reset_store, dict_to_item, dict_to_bond, dict_to_episode
 
 from .qdpi import EventLogger, get_logger
+
+from .spin_recipes import (
+    SpinRecipe,
+    get_recipe,
+    get_recipes_by_category,
+    extract_anchor_phrase,
+    render_template,
+    generate_suggestions_for_item,
+    generate_proposals_for_holologue,
+    RECIPE_BY_ID,
+    ALL_RECIPES,
+    MONOLOGUE_RECIPES,
+    DIALOGUE_RECIPES,
+    HOLOLOGUE_RECIPES,
+)
 
 __all__ = [
     # Schemas
@@ -31,7 +46,20 @@ __all__ = [
     # Constants
     "CANONICAL_EVENT_NAMES",
     # Store
-    "Store", "get_store", "reset_store", "dict_to_item", "dict_to_bond",
+    "Store", "get_store", "reset_store", "dict_to_item", "dict_to_bond", "dict_to_episode",
     # Events
     "EventLogger", "get_logger",
+    # Spin Recipes
+    "SpinRecipe",
+    "get_recipe",
+    "get_recipes_by_category",
+    "extract_anchor_phrase",
+    "render_template",
+    "generate_suggestions_for_item",
+    "generate_proposals_for_holologue",
+    "RECIPE_BY_ID",
+    "ALL_RECIPES",
+    "MONOLOGUE_RECIPES",
+    "DIALOGUE_RECIPES",
+    "HOLOLOGUE_RECIPES",
 ]

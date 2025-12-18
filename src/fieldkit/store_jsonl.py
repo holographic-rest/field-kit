@@ -319,6 +319,33 @@ def dict_to_item(d: dict) -> Item:
     )
 
 
+def dict_to_episode(d: dict) -> Episode:
+    """Convert a dict to an Episode object."""
+    actor = None
+    if "created_by_actor" in d:
+        a = d["created_by_actor"]
+        actor = ActorRef(kind=a["kind"], id=a.get("id"), display=a.get("display"))
+
+    return Episode(
+        id=d["id"],
+        network_id=d["network_id"],
+        scope=d["scope"],
+        title=d["title"],
+        status=d["status"],
+        started_at=d["started_at"],
+        last_active_at=d["last_active_at"],
+        created_by=d["created_by"],
+        created_at=d["created_at"],
+        updated_at=d["updated_at"],
+        schema_version=d.get("schema_version", 1),
+        ordinal=d.get("ordinal"),
+        curated_item_ids=d.get("curated_item_ids"),
+        curated_bond_ids=d.get("curated_bond_ids"),
+        ended_at=d.get("ended_at"),
+        created_by_actor=actor,
+    )
+
+
 def dict_to_bond(d: dict) -> Bond:
     """Convert a dict to a Bond object."""
     actor = None

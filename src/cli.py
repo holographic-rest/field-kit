@@ -8,17 +8,27 @@ Commands:
 - init: Initialize store, create Network and Episode 0
 - tutorial:start: Log tutorial.started event
 - item:create: Create an Item (Q by default)
+- item:archive: Archive an Item
 - suggestions:show: Present bond suggestions (events-only)
 - bond:create: Create a draft Bond
 - bond:run: Run a Bond (success path)
 - holologue:run: Run Holologue on selected items
 - ledger:open: Open ledger view and print objects/events
+- curate:item:add: Add an Item to curated list
+- curate:item:remove: Remove an Item from curated list
+- curate:bond:add: Add a Bond to curated list
+- curate:bond:remove: Remove a Bond from curated list
+- curated:view: View curated projection (canon)
+- export:episode: Export full Episode JSON
+- export:curated: Export curated projection JSON
 """
 
 import sys
+import json
 import argparse
 from pathlib import Path
-from typing import Optional, List
+from datetime import datetime
+from typing import Optional, List, Dict, Any, Tuple
 
 # Add src to path if needed
 sys.path.insert(0, str(Path(__file__).parent))
@@ -34,9 +44,12 @@ from fieldkit import (
     # Actors
     SYSTEM_ACTOR, USER_ACTOR,
     # Store
-    Store, get_store, reset_store,
+    Store, get_store, reset_store, dict_to_item, dict_to_episode,
     # Events
     EventLogger, get_logger,
+    # Spin Recipes
+    generate_suggestions_for_item,
+    generate_proposals_for_holologue,
 )
 
 
@@ -235,24 +248,25 @@ class FieldKitCLI:
         """
         Show bond suggestions for an item (events-only; no Bond created).
 
+        Uses Spin Recipes to generate exactly 4 content-shaped suggestions
+        with anchor phrase from the Item title.
+
         Events logged:
         - bond.suggestions.presented
         """
         self._require_init()
 
-        # Generate 4 suggestions based on the item
+        # Get the item
         item = self.store.get_item(item_id)
         if not item:
             print(f"Error: Item {item_id} not found.")
             sys.exit(1)
 
-        # Standard suggestions (per Demo Golden Flow)
-        suggestions = [
-            {"prompt_text": "Propose a minimal experiment to probe this.", "intent_type": "experiment"},
-            {"prompt_text": "List 3 assumptions this depends on.", "intent_type": "clarifies"},
-            {"prompt_text": "Write a 5-bullet decision note based on this.", "intent_type": "grounds_in"},
-            {"prompt_text": "Expand this into a concrete plan with steps.", "intent_type": "expands"},
-        ]
+        # Generate 4 suggestions using Spin Recipes
+        suggestions = generate_suggestions_for_item(
+            item_title=item["title"],
+            item_body=item.get("body"),
+        )
 
         # Log event (events-only; no Bond created)
         self.logger.bond_suggestions_presented(
@@ -262,7 +276,8 @@ class FieldKitCLI:
 
         print(f"Suggestions presented for item {item_id}:")
         for i, s in enumerate(suggestions, 1):
-            print(f"  {i}. {s['prompt_text']}")
+            recipe_id = s.get("recipe_id", "unknown")
+            print(f"  {i}. [{recipe_id}] {s['prompt_text']}")
 
         return suggestions
 
@@ -271,12 +286,13 @@ class FieldKitCLI:
         input_item_ids: List[str],
         prompt_text: str,
         intent_type: Optional[str] = None,
+        recipe_id: Optional[str] = None,
     ):
         """
         Create a draft Bond.
 
         Events logged:
-        - bond.draft_created
+        - bond.draft_created (with optional recipe_id in refs)
         - store.commit
         """
         self._require_init()
@@ -307,12 +323,13 @@ class FieldKitCLI:
         )
         self.store.upsert_bond(bond)
 
-        # Log event
+        # Log event (with optional recipe_id in refs)
         self.logger.bond_draft_created(
             self._network_id, self._episode_id,
             bond_id=bond_id,
             input_item_ids=input_item_ids,
             prompt_text=prompt_text,
+            origin=recipe_id,  # recipe_id goes in origin field per spec
         )
 
         # Commit
@@ -321,17 +338,32 @@ class FieldKitCLI:
         print(f"Bond draft created: {bond_id}")
         print(f"  Inputs: {input_item_ids}")
         print(f"  Prompt: {prompt_text}")
+        if recipe_id:
+            print(f"  Recipe: {recipe_id}")
         return bond_id
 
-    def cmd_bond_run(self, bond_id: str, output_type: str = "M"):
+    def cmd_bond_run(
+        self,
+        bond_id: str,
+        output_type: str = "M",
+        force_fail: bool = False,
+        fail_reason: str = "forced_failure",
+    ):
         """
-        Run a Bond (success path).
+        Run a Bond (success or failure path).
 
-        Events logged:
+        Success path events:
         - bond.run_requested
         - credits.delta (-10 for bond_run_spend)
         - bond.executed
         - credits.delta (+3 for bond_executed_reward)
+        - store.commit
+
+        Failure path events (force_fail=True):
+        - bond.run_requested
+        - credits.delta (-10 for bond_run_spend)
+        - bond.execution_failed
+        - credits.delta (+10 for bond_run_refund)
         - store.commit
         """
         self._require_init()
@@ -354,7 +386,43 @@ class FieldKitCLI:
         # Spend credits
         self._log_credits(delta=-10, reason="bond_run_spend", bond_id=bond_id)
 
-        # Create output item
+        # Check for forced failure
+        if force_fail:
+            now = now_iso()
+
+            # Set last_error on Bond (keep status=draft, no output_item_id)
+            from fieldkit.schemas import ErrorInfo
+            bond_dict["last_error"] = ErrorInfo(
+                message=fail_reason,
+                at=now,
+                code="FORCED_FAILURE",
+            ).to_dict()
+            bond_dict["updated_at"] = now
+
+            # Re-save the bond
+            from fieldkit.store_jsonl import dict_to_bond
+            bond = dict_to_bond(bond_dict)
+            self.store.upsert_bond(bond)
+
+            # Log execution_failed
+            self.logger.bond_execution_failed(
+                self._network_id, self._episode_id,
+                bond_id=bond_id,
+                reason=fail_reason,
+            )
+
+            # Refund credits
+            self._log_credits(delta=10, reason="bond_run_refund", bond_id=bond_id)
+
+            # Commit
+            self.logger.store_commit(self._network_id, self._episode_id)
+
+            print(f"Bond execution failed: {bond_id}")
+            print(f"  Reason: {fail_reason}")
+            print(f"  Credits: {self._credits_balance} (refunded)")
+            return None
+
+        # Success path: Create output item
         output_item_id = generate_item_id()
         now = now_iso()
 
@@ -420,17 +488,29 @@ class FieldKitCLI:
         self,
         selected_item_ids: List[str],
         artifact_kind: str = "plan",
+        force_fail: bool = False,
+        fail_reason: str = "forced_failure",
     ):
         """
         Run Holologue on selected items.
 
-        Events logged:
+        Success path events:
         - holologue.run_requested
         - credits.delta (-20 for holologue_run_spend)
         - holologue.completed
         - credits.delta (+5 for holologue_completed_reward)
         - bond.proposals.presented (optional)
         - store.commit
+
+        Failure path events (force_fail=True):
+        - holologue.run_requested
+        - credits.delta (-20 for holologue_run_spend)
+        - holologue.failed
+        - credits.delta (+20 for holologue_run_refund)
+        - store.commit
+
+        Validation failure (< 2 items):
+        - holologue.validation_failed (no spend, no refund)
         """
         self._require_init()
 
@@ -466,7 +546,29 @@ class FieldKitCLI:
             event_id=run_event.id,
         )
 
-        # Create output item
+        # Check for forced failure
+        if force_fail:
+            # Log holologue.failed
+            self.logger.holologue_failed(
+                self._network_id, self._episode_id,
+                reason=fail_reason,
+            )
+
+            # Refund credits
+            self._log_credits(
+                delta=20, reason="holologue_run_refund",
+                event_id=run_event.id,
+            )
+
+            # Commit
+            self.logger.store_commit(self._network_id, self._episode_id)
+
+            print(f"Holologue failed:")
+            print(f"  Reason: {fail_reason}")
+            print(f"  Credits: {self._credits_balance} (refunded)")
+            return None
+
+        # Success path: Create output item
         output_item_id = generate_item_id()
         now = now_iso()
 
@@ -511,13 +613,11 @@ class FieldKitCLI:
             output_item_id=output_item_id,
         )
 
-        # Emit proposals (events-only)
-        proposals = [
-            {"prompt_text": "Expand this plan into a detailed checklist.", "intent_type": "expands"},
-            {"prompt_text": "Ground this in measurable metrics.", "intent_type": "grounds_in"},
-            {"prompt_text": "Clarify the assumptions this depends on.", "intent_type": "clarifies"},
-            {"prompt_text": "Fork two variants: fastest vs most rigorous.", "intent_type": "forks"},
-        ]
+        # Emit proposals using Spin Recipes (events-only)
+        proposals = generate_proposals_for_holologue(
+            holologue_output_title=output_title,
+            holologue_output_body=output_body,
+        )
         self.logger.bond_proposals_presented(
             self._network_id, self._episode_id,
             source_output_item_id=output_item_id,
@@ -531,7 +631,10 @@ class FieldKitCLI:
         print(f"  Artifact kind: {artifact_kind}")
         print(f"  Selected items: {len(selected_item_ids)}")
         print(f"  Credits: {self._credits_balance}")
-        print("  Proposals presented (events-only)")
+        print("  Proposals presented (events-only):")
+        for i, p in enumerate(proposals, 1):
+            recipe_id = p.get("recipe_id", "unknown")
+            print(f"    {i}. [{recipe_id}] {p['prompt_text'][:50]}...")
         return output_item_id
 
     def cmd_ledger_open(self):
@@ -582,6 +685,436 @@ class FieldKitCLI:
         print(f"\nFinal Credits Balance: {self._credits_balance}")
         print("=" * 60)
 
+    # === Item Archive ===
+
+    def cmd_item_archive(self, item_id: str):
+        """
+        Archive an Item.
+
+        Events logged:
+        - store.commit
+        """
+        self._require_init()
+
+        item_dict = self.store.get_item(item_id)
+        if not item_dict:
+            print(f"Error: Item {item_id} not found.")
+            sys.exit(1)
+
+        if item_dict.get("archived_at"):
+            print(f"Item {item_id} is already archived.")
+            return
+
+        # Update item
+        now = now_iso()
+        item_dict["archived_at"] = now
+        item_dict["updated_at"] = now
+
+        item = dict_to_item(item_dict)
+        self.store.upsert_item(item)
+
+        # Commit (no episode.curated_* events per spec)
+        self.logger.store_commit(self._network_id, self._episode_id, refs={"item_id": item_id})
+
+        print(f"Item archived: {item_id}")
+
+    # === Curation Commands ===
+
+    def _get_episode_object(self) -> Tuple[dict, Episode]:
+        """Get current episode dict and object."""
+        episode_dict = self.store.get_episode(self._episode_id)
+        if not episode_dict:
+            print(f"Error: Episode {self._episode_id} not found.")
+            sys.exit(1)
+        return episode_dict, dict_to_episode(episode_dict)
+
+    def _save_episode_curation(self, episode: Episode, modified_ids: List[str] = None):
+        """Save episode after curation change and log store.commit."""
+        episode.updated_at = now_iso()
+        self.store.upsert_episode(episode)
+
+        # Log store.commit (NOT episode.curated_* events per spec requirement)
+        refs = {"episode_id": self._episode_id}
+        if modified_ids:
+            refs["modified_ids"] = modified_ids
+        self.logger.store_commit(self._network_id, self._episode_id, refs=refs)
+
+    def cmd_curate_item_add(self, item_id: str):
+        """
+        Add an Item to the curated list.
+
+        Rules (from Canon Policy):
+        - Uniqueness: no duplicates
+        - Referential validity: must exist in same network + episode
+        - Order: append to end
+        """
+        self._require_init()
+
+        # Verify item exists
+        item_dict = self.store.get_item(item_id)
+        if not item_dict:
+            print(f"Warning: Item {item_id} not found. Refusing to add.")
+            return False
+
+        # Verify same network + episode
+        if item_dict["network_id"] != self._network_id:
+            print(f"Warning: Item {item_id} belongs to different network. Refusing to add.")
+            return False
+        if item_dict["episode_id"] != self._episode_id:
+            print(f"Warning: Item {item_id} belongs to different episode. Refusing to add.")
+            return False
+
+        # Get episode
+        episode_dict, episode = self._get_episode_object()
+
+        # Initialize curated list if needed
+        if episode.curated_item_ids is None:
+            episode.curated_item_ids = []
+
+        # Check for duplicates
+        if item_id in episode.curated_item_ids:
+            print(f"Item {item_id} already curated.")
+            return False
+
+        # Append to end (preserve order)
+        episode.curated_item_ids.append(item_id)
+
+        # Save
+        self._save_episode_curation(episode, modified_ids=[item_id])
+
+        print(f"Item {item_id} added to curated list.")
+        return True
+
+    def cmd_curate_item_remove(self, item_id: str):
+        """Remove an Item from the curated list."""
+        self._require_init()
+
+        episode_dict, episode = self._get_episode_object()
+
+        if episode.curated_item_ids is None or item_id not in episode.curated_item_ids:
+            print(f"Item {item_id} not in curated list.")
+            return False
+
+        episode.curated_item_ids.remove(item_id)
+
+        # Save
+        self._save_episode_curation(episode, modified_ids=[item_id])
+
+        print(f"Item {item_id} removed from curated list.")
+        return True
+
+    def cmd_curate_bond_add(self, bond_id: str):
+        """
+        Add a Bond to the curated list.
+
+        Rules:
+        - Draft bonds allowed if explicitly curated, but warn
+        """
+        self._require_init()
+
+        # Verify bond exists
+        bond_dict = self.store.get_bond(bond_id)
+        if not bond_dict:
+            print(f"Warning: Bond {bond_id} not found. Refusing to add.")
+            return False
+
+        # Verify same network + episode
+        if bond_dict["network_id"] != self._network_id:
+            print(f"Warning: Bond {bond_id} belongs to different network. Refusing to add.")
+            return False
+        if bond_dict["episode_id"] != self._episode_id:
+            print(f"Warning: Bond {bond_id} belongs to different episode. Refusing to add.")
+            return False
+
+        # Warn if draft
+        if bond_dict["status"] == "draft":
+            print(f"Warning: Bond {bond_id} is a draft. Curating anyway as explicitly requested.")
+
+        # Get episode
+        episode_dict, episode = self._get_episode_object()
+
+        # Initialize curated list if needed
+        if episode.curated_bond_ids is None:
+            episode.curated_bond_ids = []
+
+        # Check for duplicates
+        if bond_id in episode.curated_bond_ids:
+            print(f"Bond {bond_id} already curated.")
+            return False
+
+        # Append to end (preserve order)
+        episode.curated_bond_ids.append(bond_id)
+
+        # Save
+        self._save_episode_curation(episode, modified_ids=[bond_id])
+
+        print(f"Bond {bond_id} added to curated list.")
+        return True
+
+    def cmd_curate_bond_remove(self, bond_id: str):
+        """Remove a Bond from the curated list."""
+        self._require_init()
+
+        episode_dict, episode = self._get_episode_object()
+
+        if episode.curated_bond_ids is None or bond_id not in episode.curated_bond_ids:
+            print(f"Bond {bond_id} not in curated list.")
+            return False
+
+        episode.curated_bond_ids.remove(bond_id)
+
+        # Save
+        self._save_episode_curation(episode, modified_ids=[bond_id])
+
+        print(f"Bond {bond_id} removed from curated list.")
+        return True
+
+    # === Curated Projection (Canon) ===
+
+    def compute_curated_projection(self) -> Dict[str, Any]:
+        """
+        Compute the curated projection (canon) for the current episode.
+
+        Returns:
+        {
+            "curated_items": [...],  # resolved, ordered, filtered
+            "curated_bonds": [...],  # resolved, ordered, filtered
+            "warnings": [...]        # list of warning messages
+        }
+
+        Projection algorithm (from Canon Policy):
+        1. Start with curated lists (preserve order)
+        2. Filter to: exists + same network_id + episode_id + not archived
+        3. Warn on missing, archived, wrong scope IDs
+        4. Draft bonds appear only if explicitly listed (warn)
+        """
+        self._require_init()
+
+        episode_dict = self.store.get_episode(self._episode_id)
+        if not episode_dict:
+            return {"curated_items": [], "curated_bonds": [], "warnings": ["Episode not found"]}
+
+        curated_item_ids = episode_dict.get("curated_item_ids") or []
+        curated_bond_ids = episode_dict.get("curated_bond_ids") or []
+
+        curated_items = []
+        curated_bonds = []
+        warnings = []
+
+        # Process curated items
+        for item_id in curated_item_ids:
+            item = self.store.get_item(item_id)
+
+            if not item:
+                warnings.append(f"Item {item_id}: not found (ignored)")
+                continue
+
+            if item["network_id"] != self._network_id:
+                warnings.append(f"Item {item_id}: wrong network (ignored)")
+                continue
+
+            if item["episode_id"] != self._episode_id:
+                warnings.append(f"Item {item_id}: wrong episode (ignored)")
+                continue
+
+            if item.get("archived_at"):
+                warnings.append(f"Item {item_id}: archived (filtered from projection)")
+                continue
+
+            curated_items.append(item)
+
+        # Process curated bonds
+        for bond_id in curated_bond_ids:
+            bond = self.store.get_bond(bond_id)
+
+            if not bond:
+                warnings.append(f"Bond {bond_id}: not found (ignored)")
+                continue
+
+            if bond["network_id"] != self._network_id:
+                warnings.append(f"Bond {bond_id}: wrong network (ignored)")
+                continue
+
+            if bond["episode_id"] != self._episode_id:
+                warnings.append(f"Bond {bond_id}: wrong episode (ignored)")
+                continue
+
+            if bond.get("archived_at"):
+                warnings.append(f"Bond {bond_id}: archived (filtered from projection)")
+                continue
+
+            # Draft bonds are allowed if explicitly curated, but warn
+            if bond["status"] == "draft":
+                warnings.append(f"Bond {bond_id}: is a draft (included as explicitly curated)")
+
+            curated_bonds.append(bond)
+
+        return {
+            "curated_items": curated_items,
+            "curated_bonds": curated_bonds,
+            "warnings": warnings,
+        }
+
+    def _get_lineage_badge(self, item: dict) -> str:
+        """Get lineage badge string for an item based on provenance."""
+        prov = item.get("provenance", {})
+        created_by = prov.get("created_by", "user")
+
+        if created_by == "bond":
+            bond_id = prov.get("bond_id", "unknown")
+            n_inputs = len(prov.get("input_item_ids", []))
+            return f"Derived from Bond {bond_id[:16]}... (from {n_inputs} input{'s' if n_inputs != 1 else ''})"
+
+        elif created_by == "holologue":
+            n_items = len(prov.get("selected_item_ids", []))
+            kind = prov.get("artifact_kind", "unknown")
+            return f"Holologue artifact (from {n_items} items) · kind={kind}"
+
+        else:
+            return f"Created by {created_by}"
+
+    def cmd_curated_view(self):
+        """
+        Display the curated projection (canon) view.
+
+        This is the CLI equivalent of "Ledger → Curated (Canon Projection)" tab.
+        """
+        self._require_init()
+
+        projection = self.compute_curated_projection()
+
+        print("=" * 60)
+        print("CURATED PROJECTION (CANON)")
+        print("=" * 60)
+
+        # Curated Items
+        print("\n--- Curated Items (ordered) ---")
+        items = projection["curated_items"]
+        if not items:
+            print("  (none)")
+        else:
+            for i, item in enumerate(items, 1):
+                lineage = self._get_lineage_badge(item)
+                print(f"  {i}. {item['id']}")
+                print(f"     Type: {item['type']}, Title: {item['title'][:40]}...")
+                print(f"     Lineage: {lineage}")
+
+        # Curated Bonds
+        print("\n--- Curated Bonds (ordered) ---")
+        bonds = projection["curated_bonds"]
+        if not bonds:
+            print("  (none)")
+        else:
+            for i, bond in enumerate(bonds, 1):
+                status_marker = " [DRAFT]" if bond["status"] == "draft" else ""
+                print(f"  {i}. {bond['id']}{status_marker}")
+                print(f"     Status: {bond['status']}, Output: {bond.get('output_item_id', 'none')}")
+                print(f"     Prompt: {bond['prompt_text'][:40]}...")
+
+        # Warnings
+        print("\n--- Warnings ---")
+        warnings = projection["warnings"]
+        if not warnings:
+            print("  (none)")
+        else:
+            for w in warnings:
+                print(f"  ! {w}")
+
+        print("\n" + "=" * 60)
+        return projection
+
+    # === Export Commands ===
+
+    def _get_default_export_dir(self) -> Path:
+        """Get default export directory."""
+        return self.store.data_dir.parent / "outputs"
+
+    def cmd_export_episode(self, output_path: Optional[Path] = None) -> Path:
+        """
+        Export full Episode JSON.
+
+        Includes: network, episode, items, bonds, events, derived credits balance
+        """
+        self._require_init()
+
+        # Determine output path
+        if output_path is None:
+            export_dir = self._get_default_export_dir()
+            export_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_path = export_dir / f"export_episode_{ts}.json"
+
+        # Gather data
+        network = self.store.get_network(self._network_id)
+        episode = self.store.get_episode(self._episode_id)
+        items = self.store.load_items({"episode_id": self._episode_id})
+        bonds = self.store.load_bonds({"episode_id": self._episode_id})
+        events = self.store.load_events(episode_id=self._episode_id)
+        credits_balance = self.store.compute_credits_balance(self._episode_id)
+
+        export_data = {
+            "export_type": "episode",
+            "exported_at": now_iso(),
+            "network": network,
+            "episode": episode,
+            "items": items,
+            "bonds": bonds,
+            "qdpi_events": events,
+            "derived": {
+                "credits_balance": credits_balance,
+                "item_count": len(items),
+                "bond_count": len(bonds),
+                "event_count": len(events),
+            },
+        }
+
+        # Write to file
+        with open(output_path, "w") as f:
+            json.dump(export_data, f, indent=2)
+
+        print(f"Episode exported to: {output_path}")
+        return output_path
+
+    def cmd_export_curated(self, output_path: Optional[Path] = None) -> Path:
+        """
+        Export curated projection JSON.
+
+        Includes: episode_id, network_id, raw curated lists, resolved items/bonds, warnings
+        """
+        self._require_init()
+
+        # Determine output path
+        if output_path is None:
+            export_dir = self._get_default_export_dir()
+            export_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_path = export_dir / f"export_curated_{ts}.json"
+
+        # Get episode for raw lists
+        episode = self.store.get_episode(self._episode_id)
+
+        # Compute projection
+        projection = self.compute_curated_projection()
+
+        export_data = {
+            "export_type": "curated_projection",
+            "exported_at": now_iso(),
+            "network_id": self._network_id,
+            "episode_id": self._episode_id,
+            "curated_item_ids": episode.get("curated_item_ids") or [],
+            "curated_bond_ids": episode.get("curated_bond_ids") or [],
+            "curated_items": projection["curated_items"],
+            "curated_bonds": projection["curated_bonds"],
+            "warnings": projection["warnings"],
+        }
+
+        # Write to file
+        with open(output_path, "w") as f:
+            json.dump(export_data, f, indent=2)
+
+        print(f"Curated projection exported to: {output_path}")
+        return output_path
+
 
 def main():
     """Main entry point for the CLI."""
@@ -619,6 +1152,7 @@ def main():
     p_bond.add_argument("--inputs", "-i", nargs="+", required=True, help="Input item IDs")
     p_bond.add_argument("--prompt", "-p", required=True, help="Prompt text")
     p_bond.add_argument("--intent", default=None, help="Intent type")
+    p_bond.add_argument("--recipe", "-r", default=None, help="Recipe ID (from Spin Recipes)")
 
     # bond:run
     p_run = subparsers.add_parser("bond:run", help="Run a bond")
@@ -632,6 +1166,37 @@ def main():
 
     # ledger:open
     subparsers.add_parser("ledger:open", help="Open ledger view")
+
+    # item:archive
+    p_archive = subparsers.add_parser("item:archive", help="Archive an item")
+    p_archive.add_argument("item_id", help="Item ID to archive")
+
+    # curate:item:add
+    p_curate_item_add = subparsers.add_parser("curate:item:add", help="Add item to curated list")
+    p_curate_item_add.add_argument("item_id", help="Item ID to curate")
+
+    # curate:item:remove
+    p_curate_item_rm = subparsers.add_parser("curate:item:remove", help="Remove item from curated list")
+    p_curate_item_rm.add_argument("item_id", help="Item ID to uncurate")
+
+    # curate:bond:add
+    p_curate_bond_add = subparsers.add_parser("curate:bond:add", help="Add bond to curated list")
+    p_curate_bond_add.add_argument("bond_id", help="Bond ID to curate")
+
+    # curate:bond:remove
+    p_curate_bond_rm = subparsers.add_parser("curate:bond:remove", help="Remove bond from curated list")
+    p_curate_bond_rm.add_argument("bond_id", help="Bond ID to uncurate")
+
+    # curated:view
+    subparsers.add_parser("curated:view", help="View curated projection (canon)")
+
+    # export:episode
+    p_export_ep = subparsers.add_parser("export:episode", help="Export full episode JSON")
+    p_export_ep.add_argument("--output", "-o", type=Path, default=None, help="Output file path")
+
+    # export:curated
+    p_export_cur = subparsers.add_parser("export:curated", help="Export curated projection JSON")
+    p_export_cur.add_argument("--output", "-o", type=Path, default=None, help="Output file path")
 
     args = parser.parse_args()
 
@@ -654,6 +1219,7 @@ def main():
             input_item_ids=args.inputs,
             prompt_text=args.prompt,
             intent_type=args.intent,
+            recipe_id=args.recipe,
         )
     elif args.command == "bond:run":
         cli.cmd_bond_run(args.bond_id, output_type=args.output_type)
@@ -661,6 +1227,22 @@ def main():
         cli.cmd_holologue_run(selected_item_ids=args.items, artifact_kind=args.kind)
     elif args.command == "ledger:open":
         cli.cmd_ledger_open()
+    elif args.command == "item:archive":
+        cli.cmd_item_archive(args.item_id)
+    elif args.command == "curate:item:add":
+        cli.cmd_curate_item_add(args.item_id)
+    elif args.command == "curate:item:remove":
+        cli.cmd_curate_item_remove(args.item_id)
+    elif args.command == "curate:bond:add":
+        cli.cmd_curate_bond_add(args.bond_id)
+    elif args.command == "curate:bond:remove":
+        cli.cmd_curate_bond_remove(args.bond_id)
+    elif args.command == "curated:view":
+        cli.cmd_curated_view()
+    elif args.command == "export:episode":
+        cli.cmd_export_episode(args.output)
+    elif args.command == "export:curated":
+        cli.cmd_export_curated(args.output)
 
 
 if __name__ == "__main__":

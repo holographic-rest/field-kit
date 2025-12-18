@@ -379,15 +379,20 @@ class EventLogger:
             refs={},
         )
 
-    def store_commit(self, network_id: str, episode_id: str) -> QDPIEvent:
-        """Log store.commit event."""
+    def store_commit(
+        self,
+        network_id: str,
+        episode_id: str,
+        refs: Optional[Dict[str, Any]] = None,
+    ) -> QDPIEvent:
+        """Log store.commit event with optional refs (e.g., episode_id, modified_ids)."""
         return self.log_event(
             network_id=network_id,
             episode_id=episode_id,
             name="store.commit",
             qdpi="Q",
             direction="system→field",
-            refs={},
+            refs=refs or {},
         )
 
     def store_commit_failed(
