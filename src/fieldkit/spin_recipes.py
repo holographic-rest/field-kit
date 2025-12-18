@@ -264,38 +264,102 @@ def get_recipes_by_category(category: str) -> List[SpinRecipe]:
 
 # === Anchor Phrase Extraction ===
 
-def extract_anchor_phrase(title: str, body: Optional[str] = None) -> str:
+def normalize_title_for_anchor(title: str) -> str:
     """
-    Extract a short anchor phrase from an Item title.
+    Normalize a title by stripping PAGE prefixes and numeric patterns.
 
-    v0.1 algorithm (deterministic):
-    1. If title <= 30 chars, use whole title
-    2. Otherwise, take first noun-ish phrase (up to first punctuation or conjunction)
-    3. Fallback: first 30 chars + "..."
+    Strips:
+    - ^PAGE\s+\d+\s*[-–:]\s* (e.g., "PAGE 1 – ", "PAGE 2: ")
+    - ^PAGE\s+\d+\s* (e.g., "PAGE 1 " with no delimiter)
+    - ^\d+\s*[-–_]\s* (e.g., "01 - ", "1_")
 
-    The anchor phrase must appear verbatim in rendered prompts.
+    Returns empty string if result is empty after stripping.
     """
     if not title:
-        return "this item"
+        return ""
 
-    title = title.strip()
+    result = title.strip()
 
-    # Rule 1: Short titles - use whole thing
-    if len(title) <= 30:
-        return title
+    # Strip "PAGE X – " or "PAGE X: " or "PAGE X - "
+    result = re.sub(r'^PAGE\s+\d+\s*[-–:]\s*', '', result, flags=re.IGNORECASE)
 
-    # Rule 2: Extract up to first major punctuation or conjunction
-    # Split on: comma, semicolon, colon, dash, "and", "or", "but"
-    pattern = r'^([^,;:\-–—]+?)(?:\s*[,;:\-–—]|\s+(?:and|or|but)\s)'
-    match = re.match(pattern, title, re.IGNORECASE)
+    # Strip "PAGE X " (with just whitespace after)
+    result = re.sub(r'^PAGE\s+\d+\s+', '', result, flags=re.IGNORECASE)
 
-    if match:
-        phrase = match.group(1).strip()
-        if len(phrase) >= 5:  # Ensure we got something meaningful
-            return phrase
+    # Strip leading numeric prefixes like "01 - " or "1_"
+    result = re.sub(r'^\d+\s*[-–_]\s*', '', result)
 
-    # Rule 3: Fallback - first 30 chars
-    return title[:30].rstrip() + "..."
+    return result.strip()
+
+
+def extract_anchor_phrase(title: str, body: Optional[str] = None) -> str:
+    """
+    Extract a short anchor phrase from an Item title and body.
+
+    v0.1 algorithm (deterministic):
+    1. If body contains a line starting with "Title:", use that text
+    2. Else use normalized title (after removing PAGE/numeric prefixes)
+    3. Else fall back to first meaningful phrase from body
+    4. If title <= 40 chars, use whole thing; otherwise extract phrase
+
+    The anchor phrase must appear verbatim in rendered prompts.
+    The anchor phrase must NEVER start with "PAGE".
+    """
+    # Priority 1: Check for "Title:" line in body
+    if body:
+        for line in body.split('\n'):
+            line = line.strip()
+            if line.lower().startswith('title:'):
+                # Extract text after "Title:"
+                title_text = line[6:].strip()
+                if title_text and not title_text.upper().startswith('PAGE'):
+                    return title_text
+
+    # Priority 2: Use normalized title (strips PAGE X patterns)
+    if title:
+        normalized = normalize_title_for_anchor(title)
+        if normalized and not normalized.upper().startswith('PAGE'):
+            # Apply length/phrase extraction rules to normalized title
+            if len(normalized) <= 40:
+                return normalized
+
+            # Extract up to first major punctuation or conjunction
+            pattern = r'^([^,;:\-–—]+?)(?:\s*[,;:\-–—]|\s+(?:and|or|but)\s)'
+            match = re.match(pattern, normalized, re.IGNORECASE)
+
+            if match:
+                phrase = match.group(1).strip()
+                if len(phrase) >= 5:
+                    return phrase
+
+            # Fallback for normalized title - first 40 chars
+            return normalized[:40].rstrip() + "..."
+
+    # Priority 3: Extract from body if title is unusable
+    if body:
+        # Find first non-empty, meaningful sentence/phrase
+        for line in body.split('\n'):
+            line = line.strip()
+            # Skip empty lines, Title: lines, and PAGE lines
+            if not line:
+                continue
+            if line.lower().startswith('title:'):
+                continue
+            if line.upper().startswith('PAGE'):
+                continue
+            # Skip purely numeric lines
+            if re.match(r'^\d+\.?\s*$', line):
+                continue
+
+            # Take first ~40 chars of this line
+            phrase = line[:40].rstrip()
+            if len(phrase) >= 5:
+                if len(line) > 40:
+                    phrase += "..."
+                return phrase
+
+    # Ultimate fallback
+    return "this item"
 
 
 # === Template Rendering ===

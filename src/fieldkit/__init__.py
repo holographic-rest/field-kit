@@ -22,6 +22,7 @@ from .spin_recipes import (
     SpinRecipe,
     get_recipe,
     get_recipes_by_category,
+    normalize_title_for_anchor,
     extract_anchor_phrase,
     render_template,
     generate_suggestions_for_item,
@@ -31,6 +32,11 @@ from .spin_recipes import (
     MONOLOGUE_RECIPES,
     DIALOGUE_RECIPES,
     HOLOLOGUE_RECIPES,
+)
+
+from .generation import (
+    generate_bond_output,
+    generate_holologue_output,
 )
 
 __all__ = [
@@ -53,6 +59,7 @@ __all__ = [
     "SpinRecipe",
     "get_recipe",
     "get_recipes_by_category",
+    "normalize_title_for_anchor",
     "extract_anchor_phrase",
     "render_template",
     "generate_suggestions_for_item",
@@ -62,4 +69,7 @@ __all__ = [
     "MONOLOGUE_RECIPES",
     "DIALOGUE_RECIPES",
     "HOLOLOGUE_RECIPES",
+    # Generation
+    "generate_bond_output",
+    "generate_holologue_output",
 ]

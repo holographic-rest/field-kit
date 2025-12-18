@@ -50,6 +50,10 @@ from fieldkit import (
     # Spin Recipes
     generate_suggestions_for_item,
     generate_proposals_for_holologue,
+    extract_anchor_phrase,
+    # Generation
+    generate_bond_output,
+    generate_holologue_output,
 )
 
 
@@ -426,9 +430,32 @@ class FieldKitCLI:
         output_item_id = generate_item_id()
         now = now_iso()
 
-        # Generate output content based on prompt
-        output_title = f"Output from Bond {bond_id[:12]}..."
-        output_body = f"Generated content for prompt: {bond_dict['prompt_text']}"
+        # Gather input items for generation
+        input_items = []
+        for iid in bond_dict["input_item_ids"]:
+            item = self.store.get_item(iid)
+            if item:
+                input_items.append(item)
+
+        # Get recipe_id from bond draft event if present
+        events = self.store.load_events(episode_id=self._episode_id)
+        draft_events = [e for e in events if e["name"] == "bond.draft_created" and e["refs"].get("bond_id") == bond_id]
+        recipe_id = draft_events[-1]["refs"].get("origin") if draft_events else None
+
+        # Generate real output content
+        output_body = generate_bond_output(
+            prompt_text=bond_dict["prompt_text"],
+            inputs=input_items,
+            output_type=output_type,
+            recipe_id=recipe_id,
+        )
+
+        # Generate title from anchor phrase
+        if input_items:
+            anchor = extract_anchor_phrase(input_items[0].get("title", ""), input_items[0].get("body"))
+            output_title = f"{output_type}: {anchor}"
+        else:
+            output_title = f"Output from Bond {bond_id[:12]}..."
 
         output_item = Item(
             id=output_item_id,
@@ -572,8 +599,20 @@ class FieldKitCLI:
         output_item_id = generate_item_id()
         now = now_iso()
 
-        output_title = f"Holologue artifact ({artifact_kind})"
-        output_body = f"Generated {artifact_kind} from {len(selected_item_ids)} items."
+        # Gather selected items for generation
+        selected_items = []
+        for iid in selected_item_ids:
+            item = self.store.get_item(iid)
+            if item:
+                selected_items.append(item)
+
+        # Generate real output content
+        output_body = generate_holologue_output(
+            kind=artifact_kind,
+            selected_items=selected_items,
+        )
+
+        output_title = f"Holologue: {artifact_kind} ({len(selected_item_ids)} items)"
 
         # Need to create holologue.completed event first to get its ID for provenance
         # This matches the spec requirement that provenance.holologue_event_id references

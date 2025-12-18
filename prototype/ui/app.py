@@ -14,6 +14,27 @@ import os
 from pathlib import Path
 from flask import Flask, render_template, jsonify, request
 
+# Load .env file if present (without requiring python-dotenv)
+def load_dotenv_simple():
+    """Load .env file from repo root if it exists."""
+    repo_root = Path(__file__).parent.parent.parent
+    env_file = repo_root / ".env"
+    if env_file.exists():
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    key = key.strip()
+                    value = value.strip()
+                    # Only set if not already set (don't override environment)
+                    if key and key not in os.environ:
+                        os.environ[key] = value
+
+load_dotenv_simple()
+
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
