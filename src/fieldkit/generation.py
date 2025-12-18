@@ -695,15 +695,29 @@ Use markdown formatting. Be concise but thorough."""
 Generate the artifact body now:"""
 
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            max_tokens=2000,
-            temperature=0.7,
-        )
+        # Try with max_completion_tokens first (newer models like gpt-5.x)
+        # Fall back to max_tokens for older models
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_completion_tokens=2000,
+                temperature=0.7,
+            )
+        except Exception:
+            # Fallback for older models
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_tokens=2000,
+                temperature=0.7,
+            )
         return response.choices[0].message.content
     except Exception as e:
         # Log error but don't crash - will fall back to stub
@@ -755,15 +769,29 @@ Use markdown formatting. Be thorough but focused."""
 Generate the {kind} artifact body now:"""
 
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            max_tokens=2500,
-            temperature=0.7,
-        )
+        # Try with max_completion_tokens first (newer models like gpt-5.x)
+        # Fall back to max_tokens for older models
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_completion_tokens=2500,
+                temperature=0.7,
+            )
+        except Exception:
+            # Fallback for older models
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_tokens=2500,
+                temperature=0.7,
+            )
         return response.choices[0].message.content
     except Exception as e:
         print(f"[generation] OpenAI error: {e}")
