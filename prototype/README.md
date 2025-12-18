@@ -301,6 +301,72 @@ python3 prototype/scripts/test_sprint_e_stability.py
 
 ---
 
+## Web UI (Sprint G + G.1)
+
+The prototype includes a flow-first local web UI.
+
+### Quick Start
+
+```bash
+# Start the UI server
+python3 prototype/ui/app.py
+
+# Open in browser
+open http://localhost:5001
+```
+
+### UI Design (Flow-First)
+
+The UI feels like "ChatGPT, but the assistant doesn't immediately respond":
+
+1. **Type anything** in the bottom composer → creates a **Queue item** (Q)
+2. **4 content-shaped suggestions** appear inline under the Q item
+3. **One-click suggestions** → immediately creates + runs a Bond → produces **Monologue** (M) output
+4. **Type a custom prompt** → runs Bond → produces **Dialogue** (D) output
+5. **Select 2+ items** → "Run Holologue" button appears → produces **Holologue** (H) output
+
+### Type Terminology
+
+- **Q = Queue** (user input, NOT "Question")
+- **M = Monologue** (system-suggested bond output)
+- **D = Dialogue** (user-prompted bond output)
+- **H = Holologue** (many→one synthesis)
+
+### UI Features
+
+- **Bottom Composer**: Always visible, placeholder "Create anything"
+- **Inline Suggestions**: 4 content-shaped suggestions under Q items
+- **Holologue Bar**: Appears when 2+ items selected
+- **Ledger Drawer** (left): Objects, Events, Curated, JSON tabs
+- **Credits Chip**: Derived balance display (flashes on change)
+- **Ephemeral Run Card**: UI-only during runs (never persisted)
+
+### Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Submit composer (create Q or run D bond) |
+| `L` | Toggle Ledger drawer |
+| `Esc` | Close drawer/modal |
+| `Shift+Click` | Multi-select items |
+
+### Manual UI Checklist
+
+Test the flow-first UX manually:
+
+1. **Start UI server**: `python3 prototype/ui/app.py`
+2. **Create Queue item**: Type anything in composer, press Enter
+3. **See 4 content-shaped suggestions**: Inline under the Q item
+4. **Click a suggestion**: M item created instantly
+5. **Type a custom prompt**: D item created
+6. **Select 2 items** (Shift+click): Holologue bar appears
+7. **Run Holologue**: H item created, proposals shown
+8. **Open Ledger** (press L): Verify events + credits
+
+See [`ui/README.md`](ui/README.md) for full documentation.
+
+---
+
 ## Data Directory Structure
 
 ```

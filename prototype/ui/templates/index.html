@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Field-Kit v0.1</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <span class="episode-label" id="episodeLabel">Loading...</span>
+        </div>
+        <div class="header-right">
+            <span class="chip chip-private">Private</span>
+            <span class="chip chip-credits" id="creditsChip">Credits: 0</span>
+            <button class="btn btn-secondary" id="ledgerBtn">Ledger</button>
+        </div>
+    </header>
+
+    <!-- Tutorial Banner (logging only) -->
+    <div class="tutorial-banner" id="tutorialBanner" style="display: none;">
+        <span class="tutorial-text">Tutorial logging enabled. Steps not yet implemented.</span>
+        <button class="btn btn-text tutorial-dismiss" id="dismissTutorialBtn">&times;</button>
+    </div>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+        <!-- Ledger Drawer (left) -->
+        <aside class="drawer drawer-left" id="ledgerDrawer">
+            <div class="drawer-header">
+                <h2>Ledger</h2>
+                <button class="btn btn-text drawer-close" id="closeLedgerBtn">&times;</button>
+            </div>
+            <div class="drawer-tabs">
+                <button class="tab-btn active" data-tab="objects">Objects</button>
+                <button class="tab-btn" data-tab="events">Events</button>
+                <button class="tab-btn" data-tab="curated">Curated</button>
+                <button class="tab-btn" data-tab="json">JSON</button>
+            </div>
+            <div class="drawer-content">
+                <div class="tab-panel active" id="objectsPanel">
+                    <div class="ledger-section">
+                        <h3>Items (<span id="itemCount">0</span>)</h3>
+                        <div id="ledgerItems" class="ledger-list"></div>
+                    </div>
+                    <div class="ledger-section">
+                        <h3>Bonds (<span id="bondCount">0</span>)</h3>
+                        <div id="ledgerBonds" class="ledger-list"></div>
+                    </div>
+                    <div class="ledger-section">
+                        <h3>Episodes (<span id="episodeCount">0</span>)</h3>
+                        <div id="ledgerEpisodes" class="ledger-list"></div>
+                    </div>
+                </div>
+                <div class="tab-panel" id="eventsPanel">
+                    <div class="events-filters">
+                        <select id="eventNameFilter">
+                            <option value="">All events</option>
+                        </select>
+                        <select id="eventQdpiFilter">
+                            <option value="">All QDPI</option>
+                            <option value="Q">Q (Queue)</option>
+                            <option value="M">M (Monologue)</option>
+                            <option value="D">D (Dialogue)</option>
+                            <option value="H">H (Holologue)</option>
+                        </select>
+                    </div>
+                    <div id="ledgerEvents" class="ledger-list events-list"></div>
+                </div>
+                <div class="tab-panel" id="curatedPanel">
+                    <div class="curated-section">
+                        <h3>Curated Items</h3>
+                        <div id="curatedItems" class="ledger-list"></div>
+                    </div>
+                    <div class="curated-section">
+                        <h3>Curated Bonds</h3>
+                        <div id="curatedBonds" class="ledger-list"></div>
+                    </div>
+                    <div class="curated-warnings" id="curatedWarnings"></div>
+                </div>
+                <div class="tab-panel" id="jsonPanel">
+                    <div class="json-actions">
+                        <button class="btn btn-small" id="copyJsonBtn">Copy JSON</button>
+                        <button class="btn btn-small" id="exportEpisodeBtn">Export Episode</button>
+                        <button class="btn btn-small" id="exportCuratedBtn">Export Curated</button>
+                    </div>
+                    <pre id="jsonPreview" class="json-preview">Select an object to view JSON</pre>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Field (center) -->
+        <section class="field" id="field">
+            <div class="field-content" id="fieldContent">
+                <!-- Empty state -->
+                <div class="empty-state" id="emptyState">
+                    <h1>Blank Field</h1>
+                    <p>Type anything to create your first Queue item.</p>
+                </div>
+
+                <!-- Items list with inline suggestions -->
+                <div class="items-list" id="itemsList"></div>
+
+                <!-- Ephemeral Run Card (UI-only, shown during runs) -->
+                <div class="ephemeral-card" id="ephemeralCard" style="display: none;">
+                    <div class="ephemeral-header">
+                        <span class="ephemeral-badge">Not saved yet</span>
+                        <span class="ephemeral-status" id="ephemeralStatus">Generating...</span>
+                    </div>
+                    <div class="ephemeral-content" id="ephemeralContent">
+                        <div class="shimmer"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Jump to latest button -->
+            <button class="jump-to-latest" id="jumpToLatest" style="display: none;">
+                Jump to latest
+            </button>
+
+            <!-- Holologue button (visible when 2+ items selected) -->
+            <div class="holologue-bar" id="hololoqueBar" style="display: none;">
+                <span id="hololoqueSelectedCount">2 items selected</span>
+                <button class="btn btn-primary" id="runHololoqueBtn">Run Holologue</button>
+            </div>
+
+            <!-- Bottom Composer -->
+            <div class="bottom-composer" id="bottomComposer">
+                <textarea id="composerInput" placeholder="Create anything" rows="1"></textarea>
+                <button class="btn btn-primary composer-submit" id="composerSubmit">Send</button>
+            </div>
+        </section>
+
+        <!-- Operator Drawer (right) - now primarily for prompt editing -->
+        <aside class="drawer drawer-right" id="operatorDrawer">
+            <div class="drawer-header">
+                <h2 id="operatorTitle">Edit Prompt</h2>
+                <button class="btn btn-text drawer-close" id="closeOperatorBtn">&times;</button>
+            </div>
+            <div class="drawer-content">
+                <!-- Prompt Editor Mode -->
+                <div class="operator-mode active" id="editorMode">
+                    <div class="editor-inputs">
+                        <h3>Input Items</h3>
+                        <div id="editorInputItems" class="input-items-list"></div>
+                    </div>
+                    <div class="editor-prompt">
+                        <label for="promptText">Prompt</label>
+                        <textarea id="promptText" placeholder="Enter your prompt..."></textarea>
+                    </div>
+                    <div class="editor-output-type">
+                        <label>Output type:</label>
+                        <div class="output-type-options">
+                            <label><input type="radio" name="outputType" value="M" checked> Monologue</label>
+                            <label><input type="radio" name="outputType" value="D"> Dialogue</label>
+                        </div>
+                    </div>
+                    <div class="editor-actions">
+                        <button class="btn btn-secondary" id="cancelEditorBtn">Cancel</button>
+                        <button class="btn btn-primary" id="runBondBtn">Run Bond</button>
+                    </div>
+                </div>
+
+                <!-- Run State Mode -->
+                <div class="operator-mode" id="runStateMode" style="display: none;">
+                    <div class="run-info">
+                        <p class="run-mode" id="runModeLabel">Running Bond...</p>
+                        <p class="run-inputs" id="runInputsLabel">Inputs: 0</p>
+                    </div>
+                    <div class="run-status">
+                        <div class="run-progress">
+                            <div class="shimmer"></div>
+                        </div>
+                        <p id="runStatusText">Generating...</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Holologue Modal -->
+    <div class="modal" id="hololoqueModal">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2>Run Holologue</h2>
+                <button class="btn btn-text modal-close" id="closeHololoqueModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-info" id="hololoqueModalInfo">Synthesize 2 items into one output.</p>
+                <div class="form-group">
+                    <label for="artifactKind">Artifact type</label>
+                    <select id="artifactKind">
+                        <option value="plan" selected>Plan</option>
+                        <option value="checklist">Checklist</option>
+                        <option value="spec_fragment">Spec Fragment</option>
+                        <option value="experiment">Experiment</option>
+                        <option value="story_beat">Story Beat</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelHololoqueBtn">Cancel</button>
+                <button class="btn btn-primary" id="confirmHololoqueBtn">Run Holologue</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <span class="toast-message" id="toastMessage"></span>
+        <button class="btn btn-text toast-action" id="toastAction" style="display: none;">View Ledger</button>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
