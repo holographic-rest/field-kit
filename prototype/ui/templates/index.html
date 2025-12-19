@@ -126,10 +126,13 @@
                 <button class="btn btn-primary" id="runHololoqueBtn">Run Holologue</button>
             </div>
 
-            <!-- Bottom Composer -->
+            <!-- Draft Bond Panel (appears when a Bond is drafted but not yet executed) -->
+            <div class="draft-bond-panel" id="draftBondPanel" style="display: none;"></div>
+
+            <!-- Bottom Composer (ONLY creates Q Items) -->
             <div class="bottom-composer" id="bottomComposer">
-                <textarea id="composerInput" placeholder="Create anything" rows="1"></textarea>
-                <button class="btn btn-primary composer-submit" id="composerSubmit">Send</button>
+                <textarea id="composerInput" placeholder="Create Item (Q)" rows="1"></textarea>
+                <button class="btn btn-primary composer-submit" id="composerSubmit">Create</button>
             </div>
         </section>
 
@@ -150,13 +153,8 @@
                         <label for="promptText">Prompt</label>
                         <textarea id="promptText" placeholder="Enter your prompt..."></textarea>
                     </div>
-                    <div class="editor-output-type">
-                        <label>Output type:</label>
-                        <div class="output-type-options">
-                            <label><input type="radio" name="outputType" value="M" checked> Monologue</label>
-                            <label><input type="radio" name="outputType" value="D"> Dialogue</label>
-                        </div>
-                    </div>
+                    <!-- REMOVED: Output type selector - type is derived from Bond origin -->
+                    <!-- Suggestion = M (Monologue), Custom = D (Dialogue) -->
                     <div class="editor-actions">
                         <button class="btn btn-secondary" id="cancelEditorBtn">Cancel</button>
                         <button class="btn btn-primary" id="runBondBtn">Run Bond</button>

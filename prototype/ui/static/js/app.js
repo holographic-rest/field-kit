@@ -35,6 +35,8 @@ const state = {
     lastCreatedItemId: null,
     itemSuggestions: {}, // item_id -> suggestions array
     isRunning: false,
+    // Draft Bond state - holds Bond that exists but hasn't been executed yet
+    draftBond: null, // { id, prompt_text, input_item_ids, output_type, recipe_id, intent_type }
 };
 
 // === DOM Elements ===
@@ -258,6 +260,7 @@ function renderItems() {
     });
 
     // Add click handlers for inline suggestions
+    // ONTOLOGY FIX: Click creates draft Bond, does NOT execute
     els.itemsList.querySelectorAll('.inline-suggestion').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -265,16 +268,46 @@ function renderItems() {
             const prompt = btn.dataset.prompt;
             const intent = btn.dataset.intent;
             const recipe = btn.dataset.recipe;
-            runSuggestionOneClick(itemId, prompt, intent, recipe);
+            createBondFromSuggestion(itemId, prompt, intent, recipe);
         });
+    });
+
+    // Add click handlers for custom prompt "Create Bond" buttons
+    els.itemsList.querySelectorAll('.custom-prompt-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const itemId = btn.dataset.itemId;
+            const input = document.querySelector(`.custom-prompt-input[data-item-id="${itemId}"]`);
+            if (input) {
+                createBondFromCustomPrompt(itemId, input.value);
+            }
+        });
+    });
+
+    // Handle Enter key in custom prompt inputs
+    els.itemsList.querySelectorAll('.custom-prompt-input').forEach(input => {
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                e.stopPropagation();
+                const itemId = input.dataset.itemId;
+                createBondFromCustomPrompt(itemId, input.value);
+            }
+        });
+        // Prevent item selection when clicking input
+        input.addEventListener('click', (e) => e.stopPropagation());
     });
 
     updateHololoqueBar();
 }
 
 function renderInlineSuggestions(itemId, suggestions) {
+    // Only show if no draft bond is pending
+    if (state.draftBond) return '';
+
     return `
         <div class="inline-suggestions">
+            <div class="suggestions-label">Suggestions (click to draft Bond → M output):</div>
             ${suggestions.map(s => `
                 <button class="inline-suggestion"
                         data-item-id="${itemId}"
@@ -285,6 +318,16 @@ function renderInlineSuggestions(itemId, suggestions) {
                     <span class="suggestion-text">${escapeHtml(truncate(s.prompt_text, 60))}</span>
                 </button>
             `).join('')}
+        </div>
+        <div class="custom-prompt-section">
+            <div class="custom-prompt-label">Or write your own prompt (→ D output):</div>
+            <div class="custom-prompt-row">
+                <input type="text"
+                       class="custom-prompt-input"
+                       data-item-id="${itemId}"
+                       placeholder="Enter custom prompt...">
+                <button class="btn btn-secondary custom-prompt-btn" data-item-id="${itemId}">Create Bond</button>
+            </div>
         </div>
     `;
 }
@@ -312,18 +355,14 @@ function handleItemClick(itemId, e) {
     updateHololoqueBar();
 }
 
-// === Bottom Composer (creates Q items or D bonds) ===
+// === Bottom Composer (ALWAYS creates Q items - never runs bonds) ===
 async function handleComposerSubmit() {
     const text = els.composerInput.value.trim();
     if (!text || state.isRunning) return;
 
-    // If items exist and one is selected, treat as custom bond prompt -> D output
-    if (state.items.length > 0) {
-        await runCustomBondFromComposer(text);
-    } else {
-        // First item: create Q
-        await createQueueItem(text);
-    }
+    // ONTOLOGY FIX: Composer ALWAYS creates Q Items
+    // Bond creation is a separate action (click suggestion or use custom prompt input)
+    await createQueueItem(text);
 }
 
 async function createQueueItem(text) {
@@ -365,43 +404,116 @@ async function createQueueItem(text) {
     els.composerInput.focus();
 }
 
-async function runCustomBondFromComposer(promptText) {
-    // Determine input items
-    let inputItemIds;
-    if (state.selectedItemIds.size > 0) {
-        inputItemIds = Array.from(state.selectedItemIds);
-    } else {
-        // Use most recent Q item as default input
-        const qItems = state.items.filter(i => i.type === 'Q');
-        if (qItems.length > 0) {
-            inputItemIds = [qItems[qItems.length - 1].id];
-        } else {
-            inputItemIds = [state.items[state.items.length - 1].id];
-        }
-    }
+// REMOVED: runCustomBondFromComposer - composer now ONLY creates Q Items
+// Custom prompts use the inline custom prompt input under each item
 
+// === Suggestions ===
+async function loadSuggestionsForItem(itemId) {
+    const result = await api(`/items/${itemId}/suggestions`);
+    state.itemSuggestions[itemId] = result.suggestions || [];
+    renderItems();
+}
+
+// ONTOLOGY FIX: Clicking suggestion creates a DRAFT Bond, does NOT execute
+async function createBondFromSuggestion(itemId, promptText, intentType, recipeId) {
+    if (state.isRunning || state.draftBond) return;
     state.isRunning = true;
-    els.composerInput.disabled = true;
-    els.composerSubmit.disabled = true;
 
-    // Show ephemeral card
-    showEphemeralCard('Generating...');
-
-    // Create and run bond with D output
-    const result = await api('/bonds/run-suggestion', {
+    // Create a draft Bond (not executed yet)
+    const result = await api('/bonds', {
         method: 'POST',
         body: {
-            input_item_ids: inputItemIds,
+            input_item_ids: [itemId],
             prompt_text: promptText,
-            output_type: 'D',  // Custom prompts produce D
+            intent_type: intentType || null,
+            recipe_id: recipeId || null,
+        },
+    });
+
+    if (result.bond) {
+        // Set draft Bond state - output_type is M for suggestions
+        state.draftBond = {
+            id: result.bond.id,
+            prompt_text: promptText,
+            input_item_ids: [itemId],
+            output_type: 'M', // Suggestions always produce M
+            recipe_id: recipeId,
+            intent_type: intentType,
+        };
+        renderDraftBondPanel();
+        showToast('Bond drafted. Click "Run Bond" to execute.');
+    } else {
+        showToast('Failed to create bond', false);
+    }
+
+    state.isRunning = false;
+}
+
+// Create a custom Bond (D output) from the custom prompt input
+async function createBondFromCustomPrompt(itemId, promptText) {
+    if (state.isRunning || state.draftBond) return;
+    if (!promptText.trim()) {
+        showToast('Enter a prompt');
+        return;
+    }
+    state.isRunning = true;
+
+    // Create a draft Bond (not executed yet)
+    const result = await api('/bonds', {
+        method: 'POST',
+        body: {
+            input_item_ids: [itemId],
+            prompt_text: promptText,
+            intent_type: null,
+            recipe_id: null,
+        },
+    });
+
+    if (result.bond) {
+        // Set draft Bond state - output_type is D for custom prompts
+        state.draftBond = {
+            id: result.bond.id,
+            prompt_text: promptText,
+            input_item_ids: [itemId],
+            output_type: 'D', // Custom prompts always produce D
+            recipe_id: null,
+            intent_type: null,
+        };
+        renderDraftBondPanel();
+        showToast('Bond drafted. Click "Run Bond" to execute.');
+    } else {
+        showToast('Failed to create bond', false);
+    }
+
+    state.isRunning = false;
+}
+
+// Execute the draft Bond - THIS is where AI is called
+async function executeDraftBond() {
+    if (!state.draftBond || state.isRunning) return;
+    state.isRunning = true;
+
+    showEphemeralCard('Generating...');
+
+    const result = await api(`/bonds/${state.draftBond.id}/run`, {
+        method: 'POST',
+        body: {
+            output_type: state.draftBond.output_type,
         },
     });
 
     hideEphemeralCard();
-    els.composerInput.value = '';
-    els.composerInput.style.height = 'auto';
 
     if (result.status === 'executed') {
+        // Clear suggestions for input items
+        state.draftBond.input_item_ids.forEach(id => {
+            delete state.itemSuggestions[id];
+        });
+
+        // Clear draft Bond state
+        state.draftBond = null;
+        hideDraftBondPanel();
+
         await loadItems();
         updateCredits(result.credits, true);
         state.selectedItemIds.clear();
@@ -413,52 +525,60 @@ async function runCustomBondFromComposer(promptText) {
     }
 
     state.isRunning = false;
-    els.composerInput.disabled = false;
-    els.composerSubmit.disabled = false;
-    els.composerInput.focus();
 }
 
-// === Suggestions ===
-async function loadSuggestionsForItem(itemId) {
-    const result = await api(`/items/${itemId}/suggestions`);
-    state.itemSuggestions[itemId] = result.suggestions || [];
-    renderItems();
+// Cancel the draft Bond
+function cancelDraftBond() {
+    state.draftBond = null;
+    hideDraftBondPanel();
+    showToast('Bond cancelled');
 }
 
-async function runSuggestionOneClick(itemId, promptText, intentType, recipeId) {
-    if (state.isRunning) return;
-    state.isRunning = true;
+// Render the draft Bond panel
+function renderDraftBondPanel() {
+    const panel = document.getElementById('draftBondPanel');
+    if (!panel || !state.draftBond) return;
 
-    // Show ephemeral card
-    showEphemeralCard('Generating...');
+    const inputItems = state.items.filter(i => state.draftBond.input_item_ids.includes(i.id));
+    const outputTypeLabel = state.draftBond.output_type === 'M' ? 'Monologue (AI-suggested)' : 'Dialogue (custom)';
 
-    // One-click: create bond + run -> M output
-    const result = await api('/bonds/run-suggestion', {
-        method: 'POST',
-        body: {
-            input_item_ids: [itemId],
-            prompt_text: promptText,
-            intent_type: intentType || null,
-            recipe_id: recipeId || null,
-            output_type: 'M',  // Suggestions produce M
-        },
-    });
+    panel.innerHTML = `
+        <div class="draft-bond-header">
+            <span class="draft-bond-badge">Draft Bond</span>
+            <span class="draft-bond-type">${outputTypeLabel}</span>
+        </div>
+        <div class="draft-bond-inputs">
+            <span class="draft-bond-label">Input:</span>
+            ${inputItems.map(item => `
+                <span class="draft-bond-item">
+                    <span class="item-type type-${item.type}">${item.type}</span>
+                    ${escapeHtml(truncate(item.title, 30))}
+                </span>
+            `).join('')}
+        </div>
+        <div class="draft-bond-prompt">
+            <span class="draft-bond-label">Prompt:</span>
+            <span class="draft-bond-prompt-text">${escapeHtml(state.draftBond.prompt_text)}</span>
+        </div>
+        <div class="draft-bond-actions">
+            <button class="btn btn-secondary" id="cancelDraftBondBtn">Cancel</button>
+            <button class="btn btn-primary" id="runDraftBondBtn">Run Bond</button>
+        </div>
+    `;
 
-    hideEphemeralCard();
+    panel.style.display = 'block';
 
-    if (result.status === 'executed') {
-        // Clear suggestions for this item (they've been used)
-        delete state.itemSuggestions[itemId];
+    // Add event listeners
+    document.getElementById('cancelDraftBondBtn').addEventListener('click', cancelDraftBond);
+    document.getElementById('runDraftBondBtn').addEventListener('click', executeDraftBond);
+}
 
-        await loadItems();
-        updateCredits(result.credits, true);
-        scrollToBottom();
-        showToast('Saved ✓ · View Ledger', true);
-    } else {
-        showToast('Bond execution failed', false);
+function hideDraftBondPanel() {
+    const panel = document.getElementById('draftBondPanel');
+    if (panel) {
+        panel.style.display = 'none';
+        panel.innerHTML = '';
     }
-
-    state.isRunning = false;
 }
 
 // === Prompt Editor (drawer) ===

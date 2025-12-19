@@ -453,6 +453,115 @@ html, body {
     border-top: 1px solid var(--border-color);
 }
 
+.suggestions-label,
+.custom-prompt-label {
+    width: 100%;
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+    margin-bottom: var(--space-xs);
+}
+
+/* === Custom Prompt Section (for D output) === */
+.custom-prompt-section {
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--border-color);
+}
+
+.custom-prompt-row {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.custom-prompt-input {
+    flex: 1;
+    padding: var(--space-sm);
+    font-size: var(--font-size-sm);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+
+.custom-prompt-input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+}
+
+/* === Draft Bond Panel === */
+.draft-bond-panel {
+    position: fixed;
+    bottom: calc(var(--composer-height) + var(--space-md));
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: var(--max-content-width);
+    padding: var(--space-md);
+    background: var(--bg-secondary);
+    border: 2px solid var(--accent-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 50;
+}
+
+.draft-bond-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-sm);
+}
+
+.draft-bond-badge {
+    display: inline-flex;
+    padding: var(--space-xs) var(--space-sm);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    background: var(--accent-light);
+    color: var(--accent-color);
+    border-radius: 4px;
+}
+
+.draft-bond-type {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+}
+
+.draft-bond-inputs,
+.draft-bond-prompt {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-sm);
+}
+
+.draft-bond-label {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.draft-bond-item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    font-size: var(--font-size-sm);
+}
+
+.draft-bond-prompt-text {
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+}
+
+.draft-bond-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--border-color);
+}
+
 .inline-suggestion {
     display: flex;
     flex-direction: column;

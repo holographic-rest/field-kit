@@ -1,6 +1,8 @@
-# Field-Kit v0.1 Flow-First UI
+# Field-Kit v0.1 Ontology-Correct UI
 
 Local-only web UI for Field-Kit prototype. Built on Flask + vanilla HTML/CSS/JS.
+
+**This UI enforces the Item/Bond/Execute ontology.** It is NOT chat software.
 
 ## Quick Start
 
@@ -32,37 +34,58 @@ FIELDKIT_DATA_DIR=/tmp/fieldkit-ui python3 prototype/ui/app.py
 FIELDKIT_DATA_DIR=prototype/data_ui python3 prototype/ui/app.py
 ```
 
-## Flow-First UX Design
+## Ontology-Correct UX Design
 
-The UI feels like "ChatGPT, but the assistant doesn't immediately respond":
+The UI enforces three distinct operations that must NOT be collapsed:
 
-1. **Type anything** in the bottom composer → creates a **Queue item** (Q)
-2. **4 content-shaped suggestions** appear inline under the Q item
-3. **One-click suggestions** → immediately runs Bond → produces **Monologue** (M)
-4. **Type a custom prompt** → runs Bond → produces **Dialogue** (D)
-5. **Select 2+ items** → "Run Holologue" button → produces **Holologue** (H)
+### 1. Create Item (No AI)
+
+- **Bottom composer** → always creates a **Queue item** (Q)
+- Typing and pressing Enter stores content, does NOT call AI
+- Q items are artifacts, not prompts
+
+### 2. Create Bond (No AI)
+
+- **Click a suggestion** → creates a **draft Bond** (will produce M output)
+- **Type custom prompt** → creates a **draft Bond** (will produce D output)
+- Draft Bond appears in panel, does NOT call AI yet
+
+### 3. Execute Bond (Calls AI)
+
+- **Click "Run Bond"** → executes the draft Bond
+- AI is called, credits are deducted
+- Output Item is created (M, D, or H)
+
+### Multi-Item Synthesis (Holologue)
+
+- **Select 2+ items** → "Run Holologue" button appears
+- Select artifact kind in modal → produces **Holologue** (H)
 
 ## Type Terminology
 
 | Type | Name | Created By |
 |------|------|------------|
-| Q | Queue | User typing in composer |
-| M | Monologue | Clicking a suggestion |
-| D | Dialogue | Typing a custom prompt |
-| H | Holologue | Running Holologue on 2+ items |
+| Q | Queue | User typing in composer (direct) |
+| M | Monologue | Bond execution (suggestion origin) |
+| D | Dialogue | Bond execution (custom prompt origin) |
+| H | Holologue | Holologue execution (multi-item) |
 
-**Note:** Q = **Queue**, NOT "Question" or "Query".
+**Critical:** Q = **Queue** (holding area), NOT "Question" or "Query".
+
+**Output types are DERIVED, not selected:**
+- Suggestion → M
+- Custom prompt → D
+- Holologue → H
 
 ## UI Surfaces
 
 ### Bottom Composer
 
-The main input area. Always visible.
+The main input area. **ONLY creates Q Items.**
 
-- **Placeholder**: "Create anything"
-- **If no items exist**: Creates a Q item
-- **If items exist**: Runs a Bond with D output
-- **Enter**: Submit
+- **Placeholder**: "Create Item (Q)"
+- **Button**: "Create" (not "Send")
+- **Enter**: Creates Q item (NO AI call)
 - **Shift+Enter**: New line
 
 ### Inline Suggestions
@@ -70,9 +93,25 @@ The main input area. Always visible.
 Appear under Queue items after creation.
 
 - **4 content-shaped suggestions** from Spin Recipes
-- **One-click**: Immediately runs Bond → M output
-- **Shimmer effect**: Magic at invocation
+- **Click**: Creates draft Bond (NO AI call yet)
+- **Shimmer effect**: Magic at draft creation
 - **Recipe ID shown**: e.g., `[expand_to_checklist]`
+
+### Custom Prompt Input
+
+Appears under suggestions for each item.
+
+- **Input field**: "Enter custom prompt..."
+- **Button**: "Create Bond"
+- **Creates draft Bond** with D output type
+
+### Draft Bond Panel
+
+Appears when a Bond is drafted but not yet executed.
+
+- Shows input items, prompt text, output type (derived)
+- **"Run Bond" button**: Executes the Bond (AI call)
+- **"Cancel" button**: Discards the draft Bond
 
 ### Holologue Bar
 
@@ -213,13 +252,22 @@ The headless tests continue to work independently.
 
 ## Manual UI Checklist
 
-Test the flow-first UX:
+Test the ontology-correct UX:
 
 1. `python3 prototype/ui/app.py`
 2. Type "I want to build something cool" → Enter
+   - **Verify**: Q item created, NO AI call, credits +3
 3. See 4 content-shaped suggestions appear
-4. Click any suggestion → M item created
-5. Type "Tell me more" → Enter → D item created
-6. Shift+click to select 2 items
-7. Click "Run Holologue" → H item created
-8. Press `L` → verify events + credits = correct
+4. Click any suggestion
+   - **Verify**: Draft Bond panel appears, NO AI call yet
+5. Click "Run Bond"
+   - **Verify**: AI called, M item created, credits deducted
+6. Type in custom prompt input under an item → "Create Bond"
+   - **Verify**: Draft Bond panel appears (D output type)
+7. Click "Run Bond"
+   - **Verify**: D item created
+8. Shift+click to select 2 items
+9. Click "Run Holologue" → select kind → confirm
+   - **Verify**: H item created
+10. Press `L` → verify events follow correct sequence:
+    - item.created → bond.draft_created → bond.run_requested → bond.executed
