@@ -346,7 +346,23 @@ def api_ledger():
 
 
 if __name__ == "__main__":
-    PORT = 5002
+    import socket
+
+    PORT = int(os.environ.get("PORT", 5002))
+
+    # Check if port is in use before starting
+    def is_port_in_use(port):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex(('localhost', port)) == 0
+
+    if is_port_in_use(PORT):
+        print(f"\nError: Port {PORT} is already in use.")
+        print(f"\nTo fix this, run:")
+        print(f"  lsof -ti:{PORT} | xargs kill -9")
+        print(f"\nOr use a different port:")
+        print(f"  PORT=5003 python3 prototype/ui_v2/app.py\n")
+        sys.exit(1)
+
     print("=" * 60)
     print("Field-Kit v2 UI (Wrapper-styled)")
     print("=" * 60)
@@ -354,13 +370,4 @@ if __name__ == "__main__":
     print(f"Starting server at http://localhost:{PORT}")
     print("=" * 60)
 
-    # Add port-in-use error handling
-    import socket
-    try:
-        app.run(host="localhost", port=PORT, debug=True)
-    except OSError as e:
-        if "Address already in use" in str(e):
-            print(f"\nPort {PORT} is already in use.")
-            print(f"\nTo fix this, run:\n  lsof -ti:{PORT} | xargs kill -9\n")
-        else:
-            raise
+    app.run(host="localhost", port=PORT, debug=True)
