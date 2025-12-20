@@ -350,24 +350,29 @@ if __name__ == "__main__":
 
     PORT = int(os.environ.get("PORT", 5002))
 
-    # Check if port is in use before starting
-    def is_port_in_use(port):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            return s.connect_ex(('localhost', port)) == 0
+    # Only check port on initial run, not on reloader restart
+    # WERKZEUG_RUN_MAIN is set when Flask reloader spawns child process
+    is_reloader_process = os.environ.get("WERKZEUG_RUN_MAIN") == "true"
 
-    if is_port_in_use(PORT):
-        print(f"\nError: Port {PORT} is already in use.")
-        print(f"\nTo fix this, run:")
-        print(f"  lsof -ti:{PORT} | xargs kill -9")
-        print(f"\nOr use a different port:")
-        print(f"  PORT=5003 python3 prototype/ui_v2/app.py\n")
-        sys.exit(1)
+    if not is_reloader_process:
+        # Check if port is in use before starting
+        def is_port_in_use(port):
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                return s.connect_ex(('localhost', port)) == 0
 
-    print("=" * 60)
-    print("Field-Kit v2 UI (Wrapper-styled)")
-    print("=" * 60)
-    print(f"Data directory: {DATA_DIR or 'prototype/data/'}")
-    print(f"Starting server at http://localhost:{PORT}")
-    print("=" * 60)
+        if is_port_in_use(PORT):
+            print(f"\nError: Port {PORT} is already in use.")
+            print(f"\nTo fix this, run:")
+            print(f"  lsof -ti:{PORT} | xargs kill -9")
+            print(f"\nOr use a different port:")
+            print(f"  PORT=5003 python3 prototype/ui_v2/app.py\n")
+            sys.exit(1)
+
+        print("=" * 60)
+        print("Field-Kit v2 UI (Wrapper-styled)")
+        print("=" * 60)
+        print(f"Data directory: {DATA_DIR or 'prototype/data/'}")
+        print(f"Starting server at http://localhost:{PORT}")
+        print("=" * 60)
 
     app.run(host="localhost", port=PORT, debug=True)
