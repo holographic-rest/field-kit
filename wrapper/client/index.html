@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPT-5.2</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-title">GPT-5.2</div>
+      <button class="btn-new-chat" id="newChatBtn">+ New chat</button>
+    </header>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span>Conversations</span>
+        <button class="sidebar-toggle" id="sidebarToggle">&times;</button>
+      </div>
+      <div class="conversation-list" id="conversationList"></div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main" id="main">
+      <!-- Landing state -->
+      <div class="landing" id="landing">
+        <div class="landing-hero">
+          <h1>GPT-5.2</h1>
+          <p>How can I help you today?</p>
+        </div>
+        <div class="prompt-chips" id="promptChips">
+          <button class="chip">Explain quantum computing</button>
+          <button class="chip">Write a Python function</button>
+          <button class="chip">Debug my code</button>
+          <button class="chip">Summarize this article</button>
+          <button class="chip">Create a meal plan</button>
+          <button class="chip">Help me brainstorm</button>
+        </div>
+      </div>
+
+      <!-- Messages -->
+      <div class="messages" id="messages"></div>
+
+      <!-- Jump to latest -->
+      <button class="jump-to-latest" id="jumpToLatest">↓ Jump to latest</button>
+
+      <!-- Composer -->
+      <div class="composer" id="composer">
+        <div class="composer-inner">
+          <textarea id="input" placeholder="Message GPT-5.2..." rows="1"></textarea>
+          <button class="btn-send" id="sendBtn" disabled>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+            </svg>
+          </button>
+          <button class="btn-stop" id="stopBtn" style="display:none;">Stop</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Sidebar toggle (when closed) -->
+    <button class="sidebar-open" id="sidebarOpen">☰</button>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

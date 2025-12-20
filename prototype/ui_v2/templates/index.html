@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Field-Kit</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <div class="header-title">Field-Kit</div>
+      </div>
+      <div class="header-right">
+        <div class="credits-display" id="creditsDisplay">
+          <span class="credits-label">Credits:</span>
+          <span class="credits-value" id="creditsValue">--</span>
+        </div>
+        <button class="btn-ledger" id="ledgerBtn">Ledger</button>
+        <button class="btn-new-chat" id="newSessionBtn">+ New Session</button>
+      </div>
+    </header>
+
+    <!-- Main content -->
+    <main class="main" id="main">
+      <!-- Landing state -->
+      <div class="landing" id="landing">
+        <div class="landing-hero">
+          <h1>Field-Kit</h1>
+          <p>Queue your thoughts. Let AI suggest what to do with them.</p>
+        </div>
+        <div class="prompt-chips" id="promptChips">
+          <button class="chip">Analyze this document for key themes</button>
+          <button class="chip">Help me brainstorm project ideas</button>
+          <button class="chip">Summarize my notes from today</button>
+          <button class="chip">Find connections in my research</button>
+        </div>
+      </div>
+
+      <!-- Items feed -->
+      <div class="items-feed" id="itemsFeed"></div>
+
+      <!-- Jump to latest -->
+      <button class="jump-to-latest" id="jumpToLatest">Jump to latest</button>
+
+      <!-- Composer -->
+      <div class="composer" id="composer">
+        <div class="composer-inner">
+          <textarea id="input" placeholder="Queue something..." rows="1"></textarea>
+          <button class="btn-send" id="sendBtn" disabled>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Ledger Modal -->
+    <div class="modal-overlay" id="ledgerModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Ledger</h2>
+          <button class="modal-close" id="ledgerClose">&times;</button>
+        </div>
+        <div class="modal-body" id="ledgerContent">
+          Loading...
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
