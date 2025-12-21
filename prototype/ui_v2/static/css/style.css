@@ -311,9 +311,9 @@ html, body {
 }
 
 .suggestions-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .suggestion-btn {
@@ -758,7 +758,7 @@ html, body {
   }
 
   .suggestions-grid {
-    grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   .composer {

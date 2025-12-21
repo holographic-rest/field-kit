@@ -51,7 +51,14 @@ from .handles import (
     Handle,
     extract_handles as extract_content_handles,
     select_diverse_handles as select_content_handles,
+    choose_top_handles,
     debug_handles,
+)
+
+from .bond_suggester import (
+    generate_suggestions as generate_bond_suggestions,
+    suggestions_to_legacy_format as bond_suggestions_to_legacy,
+    TEST_WORDS,
 )
 
 from .generation import (
@@ -104,7 +111,12 @@ __all__ = [
     "Handle",
     "extract_content_handles",
     "select_content_handles",
+    "choose_top_handles",
     "debug_handles",
+    # Bond Suggester (varied language)
+    "generate_bond_suggestions",
+    "bond_suggestions_to_legacy",
+    "TEST_WORDS",
     # Generation
     "generate_bond_output",
     "generate_holologue_output",

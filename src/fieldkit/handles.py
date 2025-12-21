@@ -8,10 +8,11 @@ Priority order:
 1. Bullet labels (lines with ":" or starting with "-" or "*")
 2. Colon clauses (What X is:, How X works:)
 3. Named entities (The Entrance Way, Vault, QDPI)
-4. Short noun phrases and proper nouns
+4. Multi-word phrases (>= 3 words preferred)
 5. Sentence fragments (only if better handles unavailable)
 
-Returns at least 8 handles when possible.
+Returns at least 8 handles when possible, up to 20 max.
+Multi-word spans (>= 3 words) are preferred over single nouns.
 """
 
 from dataclasses import dataclass
@@ -39,6 +40,28 @@ DOMAIN_ENTITIES = {
     "gpus", "linear algebra", "agents", "operator", "prompt",
     "infrastructure", "architecture", "stack", "layer",
 }
+
+
+def _word_count(text: str) -> int:
+    """Count words in text."""
+    return len(text.split())
+
+
+def _score_by_word_count(quote: str, base_score: float) -> float:
+    """
+    Boost score for multi-word spans (>= 3 words).
+
+    Multi-word spans are more content-specific and make better handles.
+    """
+    wc = _word_count(quote)
+    if wc >= 5:
+        return min(base_score + 0.15, 1.0)  # Strong boost for 5+ words
+    elif wc >= 3:
+        return min(base_score + 0.08, 1.0)  # Moderate boost for 3-4 words
+    elif wc == 2:
+        return base_score  # No change for 2 words
+    else:
+        return max(base_score - 0.10, 0.1)  # Penalty for single words
 
 
 def extract_handles(text: str, title: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -92,12 +115,15 @@ def extract_handles(text: str, title: Optional[str] = None) -> List[Dict[str, An
             else:
                 quote = quote[:77].strip() + "..."
 
+        # Apply word count boost to score (prefer multi-word spans)
+        adjusted_score = _score_by_word_count(quote, score)
+
         seen_quotes.add(quote_normalized)
         handles.append({
             "handle_id": str(uuid.uuid4())[:8],
             "quote": quote,
             "kind": kind,
-            "score": score,
+            "score": adjusted_score,
             "source": source,
             "line_num": line_num,
         })
@@ -311,6 +337,25 @@ def _overlaps(quote: str, used_quotes: set) -> bool:
     return False
 
 
+def choose_top_handles(handles: List[Dict[str, Any]], k: int = 4) -> List[Dict[str, Any]]:
+    """
+    Choose top k handles with diversity of kinds.
+
+    This is an alias for select_diverse_handles that enforces:
+    - Exactly k handles returned (or less if insufficient input)
+    - Diversity across handle kinds (bullet, colon, entity, phrase, sentence)
+    - Preference for multi-word spans (>= 3 words)
+
+    Args:
+        handles: List of handle dicts from extract_handles
+        k: Number of handles to select (default 4)
+
+    Returns:
+        List of k selected handle dicts
+    """
+    return select_diverse_handles(handles, count=k)
+
+
 def debug_handles(text: str, title: Optional[str] = None) -> None:
     """Print selected handles for debugging."""
     handles = extract_handles(text, title)
@@ -325,7 +370,8 @@ def debug_handles(text: str, title: Optional[str] = None) -> None:
 
     for i, h in enumerate(handles[:12], 1):
         marker = " <--" if h in diverse else ""
-        print(f"  {i:2}. [{h['kind']:8}] {h['score']:.2f} | {h['quote'][:50]}...{marker}")
+        wc = _word_count(h['quote'])
+        print(f"  {i:2}. [{h['kind']:8}] {h['score']:.2f} ({wc}w) | {h['quote'][:50]}...{marker}")
 
     print(f"\nSelected {len(diverse)} diverse handles:")
     for i, h in enumerate(diverse, 1):

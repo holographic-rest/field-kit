@@ -909,8 +909,11 @@ def render_template(
 
 # === Suggestion Generation (Item Context) ===
 
-# Import handle extraction from new handles.py module
-from .handles import extract_handles as extract_item_handles, select_diverse_handles
+# Import the new varied bond suggester
+from .bond_suggester import (
+    generate_suggestions as generate_varied_suggestions,
+    suggestions_to_legacy_format as suggester_to_legacy,
+)
 
 # Import context transformer for Holologue (still uses old approach for now)
 from .context_transformer import (
@@ -918,114 +921,6 @@ from .context_transformer import (
     transform_holologue_context,
     suggestions_to_legacy_format,
 )
-
-
-# === Bond Generation (Content-Specific, Non-Template) ===
-
-# 4 transformation types - each produces a distinctly different output
-BOND_TYPES = [
-    {
-        "id": "unpack",
-        "intent_type": "clarifies",
-        "recipe_id": "clarify_to_testable_claim",
-    },
-    {
-        "id": "trace",
-        "intent_type": "grounds_in",
-        "recipe_id": "interaction_trace",
-    },
-    {
-        "id": "bridge",
-        "intent_type": "bridges",
-        "recipe_id": "architecture_map",
-    },
-    {
-        "id": "operationalize",
-        "intent_type": "expands",
-        "recipe_id": "implementation_plan",
-    },
-]
-
-
-def _compose_bond(handle: Dict[str, Any], bond_type: Dict[str, Any], item_body: Optional[str]) -> str:
-    """
-    Compose a content-specific bond sentence from a handle.
-
-    NOT a template fill-in. The sentence structure depends on:
-    - The handle's kind (bullet, colon, entity, phrase, sentence)
-    - The handle's actual content semantics
-    - The transformation type (unpack, trace, bridge, operationalize)
-
-    Each bond quotes the handle verbatim.
-    """
-    quote = handle["quote"]
-    kind = handle["kind"]
-    bond_id = bond_type["id"]
-
-    # Analyze handle content for semantic composition
-    q_lower = quote.lower()
-    has_how = "how" in q_lower
-    has_what = "what" in q_lower
-    has_why = "why" in q_lower
-    has_is = " is " in q_lower or " is:" in q_lower
-    has_plus = "+" in quote or " and " in q_lower or "/" in quote
-    has_process = any(w in q_lower for w in ["moves", "flow", "through", "process", "step"])
-    has_structure = any(w in q_lower for w in ["layer", "architecture", "system", "component", "module"])
-    has_action = any(w in q_lower for w in ["implement", "create", "build", "deploy", "run"])
-
-    if bond_id == "unpack":
-        # UNPACK: Define, clarify, make precise
-        if has_plus:
-            # Compound phrase - unpack the relationship
-            return f'Define what "{quote}" means: what does each part contribute and how do they combine?'
-        elif has_is:
-            # Definition statement - make it concrete
-            return f'Make "{quote}" concrete: give 3 specific examples that would satisfy this definition.'
-        elif kind == "entity":
-            # Entity - define its role
-            return f'Define "{quote}": what does it store, what connects to it, and why does it matter?'
-        elif kind == "bullet" or kind == "colon":
-            # Structured content - extract the claim
-            return f'What specific claim does "{quote}" make? State it as something that could be verified.'
-        else:
-            return f'Clarify "{quote}": what exactly does this mean and what would prove it true or false?'
-
-    elif bond_id == "trace":
-        # TRACE: Step-by-step flow, process
-        if has_how or has_process:
-            return f'Trace "{quote}" as 8 concrete steps: what triggers it, what changes at each step, and what is the end state?'
-        elif has_structure:
-            return f'Walk through "{quote}" layer by layer: what happens at each level and how does data flow between them?'
-        elif kind == "bullet":
-            return f'Break "{quote}" into a sequence: what happens first, what follows, and what signals completion?'
-        else:
-            return f'Trace the lifecycle of "{quote}": from initial trigger through processing to final output.'
-
-    elif bond_id == "bridge":
-        # BRIDGE: Connect concepts, map relationships
-        if has_structure:
-            return f'Map "{quote}" to the rest of the system: what does it depend on and what depends on it?'
-        elif kind == "entity":
-            return f'Connect "{quote}" to 3 other concepts in this domain: what do they share and how do they differ?'
-        elif has_plus:
-            parts = re.split(r'[+/]|\s+and\s+', quote, flags=re.IGNORECASE)
-            if len(parts) >= 2:
-                return f'Bridge "{parts[0].strip()}" and "{parts[1].strip()}": what interface connects them and what flows between?'
-        return f'Map "{quote}" onto the architecture: which layer owns it and what are its upstream/downstream dependencies?'
-
-    elif bond_id == "operationalize":
-        # OPERATIONALIZE: Turn into action, constraints, tests
-        if has_action:
-            return f'Turn "{quote}" into a 5-item checklist with specific done criteria for each step.'
-        elif "learn" in q_lower or "improve" in q_lower:
-            return f'Operationalize "{quote}": name 3 metrics to track and 3 feedback signals to capture.'
-        elif kind == "bullet" or kind == "colon":
-            return f'Convert "{quote}" into 5 acceptance criteria with pass/fail conditions.'
-        else:
-            return f'Operationalize "{quote}": list 5 concrete constraints or tests that would enforce this.'
-
-    # Fallback (shouldn't reach)
-    return f'Explore "{quote}" in more detail with concrete examples.'
 
 
 def generate_suggestions_for_item(
@@ -1036,71 +931,30 @@ def generate_suggestions_for_item(
     """
     Generate exactly 4 content-specific bond suggestions for an Item.
 
-    Pipeline:
-    1. Extract 8-20 handles from Item content (prioritizing bullets/colons)
-    2. Select 4 diverse handles (different kinds)
-    3. Compose 4 unique bonds (NOT templates) based on handle semantics
+    Uses the new varied bond suggester which:
+    - Extracts 8-20 handles from Item content (multi-word spans preferred)
+    - Selects 4 diverse handles (different kinds)
+    - Tries OpenAI generation if API key available
+    - Falls back to VARIED deterministic generation (50+ sentence patterns)
 
     Each suggestion:
-    - Quotes a verbatim substring from the Item's actual content
-    - Uses a distinct transformation type (unpack, trace, bridge, operationalize)
-    - Is a content-specific sentence (not a template fill-in)
+    - Quotes a VERBATIM substring from the Item's actual content
+    - Uses a DIFFERENT intent type (not same 4 every time)
+    - Has VARIED surface language (not always Define/Trace/Map/Operationalize)
     - Full text displayed in UI (no truncation/ellipsis)
 
     Returns:
     - display_text: The bond sentence (full text)
     - prompt_text: Full prompt with context for Bond execution
-    - intent_type: clarifies | grounds_in | bridges | expands
+    - intent_type: clarifies | grounds_in | bridges | expands | etc.
     - recipe_id: for traceability
     - handle_quote: the verbatim handle used (for UI display)
     """
-    # Extract handles from content
-    handles = extract_item_handles(item_body or "", item_title)
+    # Use the new varied suggestion generator
+    suggestions = generate_varied_suggestions(item_title, item_body, other_item_titles)
 
-    # Select 4 diverse handles
-    diverse_handles = select_diverse_handles(handles, count=4)
-
-    # Fallback if insufficient handles
-    if len(diverse_handles) < 4:
-        # Pad with title-derived handle
-        fallback_quote = normalize_title_for_anchor(item_title) or "this content"
-        fallback_handle = {
-            "handle_id": "fallback",
-            "quote": fallback_quote,
-            "kind": "phrase",
-            "score": 0.5,
-            "source": "title",
-            "line_num": 0,
-        }
-        while len(diverse_handles) < 4:
-            diverse_handles.append(fallback_handle)
-
-    suggestions = []
-
-    for i, bond_type in enumerate(BOND_TYPES):
-        handle = diverse_handles[i]
-
-        # Compose content-specific bond (NOT a template)
-        bond_sentence = _compose_bond(handle, bond_type, item_body)
-
-        # Build prompt_text with context
-        prompt_text = bond_sentence
-        if item_body:
-            # Add context from item body
-            excerpt = item_body[:300].strip()
-            if len(item_body) > 300:
-                excerpt += "..."
-            prompt_text = f"{bond_sentence}\n\nContext:\n> {excerpt}"
-
-        suggestions.append({
-            "display_text": bond_sentence,
-            "prompt_text": prompt_text,
-            "intent_type": bond_type["intent_type"],
-            "recipe_id": bond_type["recipe_id"],
-            "handle_quote": handle["quote"],
-        })
-
-    return suggestions
+    # Ensure legacy format compatibility
+    return suggester_to_legacy(suggestions)
 
 
 # === Proposal Generation (Holologue Context) ===
