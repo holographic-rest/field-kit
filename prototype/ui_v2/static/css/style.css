@@ -391,6 +391,30 @@ html, body {
   margin-top: 4px;
 }
 
+/* Queue Lattice: Gating Hint */
+.gating-hint {
+  max-width: 820px;
+  width: 100%;
+  margin: 16px auto;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #1a2a3a 0%, #1a1a2a 100%);
+  border: 1px dashed #3a5a7a;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.gating-icon {
+  font-size: 24px;
+}
+
+.gating-text {
+  color: #8ab4f8;
+  font-size: 15px;
+  font-weight: 500;
+}
+
 /* Queue Lattice: Hololoop Options */
 .hololoop-container {
   max-width: 820px;
@@ -405,27 +429,20 @@ html, body {
 
 .hololoop-label {
   display: block;
-  font-size: 12px;
-  color: #888;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
-}
-
-.hololoop-items {
-  display: block;
   font-size: 13px;
   color: #4ade80;
+  font-weight: 500;
+  margin-bottom: 4px;
 }
 
 .hololoop-grid {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .hololoop-btn {
-  padding: 14px 16px;
+  padding: 16px 20px;
   background: #1a2a1a;
   border: 1px solid #2a4a2a;
   border-radius: 12px;
@@ -436,12 +453,17 @@ html, body {
   transition: all 0.2s;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  /* IMPORTANT: No truncation - full text display */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .hololoop-btn:hover {
   background: #2a3a2a;
   border-color: #4ade80;
+  transform: translateY(-1px);
 }
 
 .hololoop-btn:disabled {
@@ -454,26 +476,27 @@ html, body {
   border-color: #4ade80;
 }
 
-.hololoop-relation {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #4ade80;
-  font-weight: 600;
-}
-
 .hololoop-forward,
 .hololoop-return {
   display: block;
-  font-size: 13px;
+  font-size: 14px;
   color: #ececec;
-  line-height: 1.4;
+  line-height: 1.5;
+  /* IMPORTANT: No truncation */
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.hololoop-divider {
+  display: block;
+  color: #4ade80;
+  font-size: 16px;
+  text-align: center;
+  padding: 4px 0;
 }
 
 .hololoop-return {
   color: #aaa;
-  padding-left: 16px;
-  border-left: 2px solid #3a3a3a;
 }
 
 /* Success toast */

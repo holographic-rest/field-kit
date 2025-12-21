@@ -1,16 +1,17 @@
 """
-Field-Kit v0.1 Hololoop Engine (Queue Lattice PASS 1)
+Field-Kit v0.1 Hololoop Engine (Queue Lattice PASS 2)
 
 Generates 4 hololoop options for connecting two Queue Items.
 
 A hololoop is a two-way navigational bond between items A and B:
-- link_text_forward: A→B sentence referencing a handle from B
-- link_text_return: B→A sentence referencing a handle from A
+- link_text_forward: A→B sentence referencing handles from BOTH A and B
+- link_text_return: B→A sentence referencing handles from BOTH B and A
 
-Key requirements:
-- Each link sentence must quote a verbatim handle from the opposite item
-- 4 options with varied relation types (extends, supports, contrasts, elaborates)
+Key requirements (PASS 2):
+- Each link sentence must quote handles from BOTH items (not just one)
+- 4 options with varied sentence structures
 - Content-derived, not generic templates
+- No relation type labels shown to user
 """
 
 import hashlib
@@ -21,67 +22,32 @@ from typing import List, Dict, Any, Optional, Tuple
 from .handles import extract_handles, choose_diverse_handles
 
 
-# === Relation types for hololoops ===
-RELATION_TYPES = [
+# === Bidirectional sentence templates (PASS 2: both handles in each sentence) ===
+# Each template uses {handle_a} and {handle_b} - both must appear
+BIDIRECTIONAL_TEMPLATES = [
+    # Template set 1: extends/develops
     {
         "id": "extends",
-        "forward_templates": [
-            'extends into "{handle}"',
-            'builds toward "{handle}"',
-            'develops into "{handle}"',
-            'leads to "{handle}"',
-        ],
-        "return_templates": [
-            'extends from "{handle}"',
-            'builds on "{handle}"',
-            'develops "{handle}"',
-            'follows from "{handle}"',
-        ],
+        "forward": 'How does "{handle_a}" lead into "{handle_b}"?',
+        "return": 'How does "{handle_b}" build on "{handle_a}"?',
     },
+    # Template set 2: supports/grounds
     {
         "id": "supports",
-        "forward_templates": [
-            'supports "{handle}"',
-            'provides evidence for "{handle}"',
-            'grounds "{handle}"',
-            'validates "{handle}"',
-        ],
-        "return_templates": [
-            'is supported by "{handle}"',
-            'draws evidence from "{handle}"',
-            'is grounded by "{handle}"',
-            'is validated by "{handle}"',
-        ],
+        "forward": '"{handle_a}" provides a foundation for understanding "{handle_b}"',
+        "return": '"{handle_b}" draws context from "{handle_a}"',
     },
+    # Template set 3: contrasts/differs
     {
         "id": "contrasts",
-        "forward_templates": [
-            'contrasts with "{handle}"',
-            'differs from "{handle}"',
-            'challenges "{handle}"',
-            'offers alternative to "{handle}"',
-        ],
-        "return_templates": [
-            'contrasts with "{handle}"',
-            'differs from "{handle}"',
-            'is challenged by "{handle}"',
-            'has alternative in "{handle}"',
-        ],
+        "forward": 'Compare "{handle_a}" with "{handle_b}"',
+        "return": 'How does "{handle_b}" differ from "{handle_a}"?',
     },
+    # Template set 4: elaborates/unpacks
     {
         "id": "elaborates",
-        "forward_templates": [
-            'elaborates on "{handle}"',
-            'unpacks "{handle}"',
-            'details "{handle}"',
-            'clarifies "{handle}"',
-        ],
-        "return_templates": [
-            'is elaborated by "{handle}"',
-            'is unpacked in "{handle}"',
-            'is detailed in "{handle}"',
-            'is clarified by "{handle}"',
-        ],
+        "forward": '"{handle_a}" expands into "{handle_b}"',
+        "return": '"{handle_b}" unpacks the idea in "{handle_a}"',
     },
 ]
 
@@ -119,15 +85,19 @@ def _try_openai_generation(
         system_prompt = """You generate exactly 4 hololoop options connecting two items.
 
 A hololoop has two hololinks:
-- link_text_forward: How Item A relates to Item B (must quote a handle from B)
-- link_text_return: How Item B relates to Item A (must quote a handle from A)
+- link_text_forward: How A relates to B (must quote handles from BOTH A and B)
+- link_text_return: How B relates to A (must quote handles from BOTH B and A)
 
-RULES:
-1. Each link_text must quote ONE handle verbatim from the OPPOSITE item
-2. Put the handle in double quotes within the sentence
-3. Keep sentences short (8-20 words)
-4. Use 4 DIFFERENT relation types (extends, supports, contrasts, elaborates)
-5. Make sentences specific to the content, not generic
+CRITICAL RULES:
+1. Each link_text MUST contain quotes from BOTH items (one A handle AND one B handle)
+2. Put handles in double quotes within the sentence
+3. Keep sentences 10-25 words
+4. Make sentences specific to the content, not generic
+5. Each option should use DIFFERENT handles
+
+Example format:
+- forward: 'How does "A's concept" connect to "B's idea"?'
+- return: '"B's idea" builds on "A's concept"'
 
 Output JSON:
 {
@@ -135,8 +105,10 @@ Output JSON:
     {
       "option_index": 1,
       "relation_type": "extends|supports|contrasts|elaborates",
-      "link_text_forward": "sentence about B quoting a B handle",
-      "link_text_return": "sentence about A quoting an A handle"
+      "link_text_forward": "sentence with BOTH A handle and B handle",
+      "link_text_return": "sentence with BOTH B handle and A handle",
+      "handle_a_used": "the handle from A",
+      "handle_b_used": "the handle from B"
     },
     ...
   ]
@@ -150,17 +122,17 @@ Output JSON:
 Title: {item_a.get("title", "")}
 Body: {body_a}
 
-Handles from A (quote one in link_text_return):
+Handles from A (use in BOTH link_text_forward AND link_text_return):
 {json.dumps(quotes_a, indent=2)}
 
 Item B:
 Title: {item_b.get("title", "")}
 Body: {body_b}
 
-Handles from B (quote one in link_text_forward):
+Handles from B (use in BOTH link_text_forward AND link_text_return):
 {json.dumps(quotes_b, indent=2)}
 
-Generate 4 hololoop options with different relation types."""
+Generate 4 hololoop options. EACH sentence must contain one A handle AND one B handle."""
 
         client = openai.OpenAI(api_key=api_key)
 
@@ -229,6 +201,7 @@ def _deterministic_fallback(
     """
     Generate hololoop options deterministically.
 
+    PASS 2: Each hololink sentence must reference handles from BOTH items.
     Uses content-based seed to select varied templates and handles.
     """
     # Content hash for deterministic but varied selection
@@ -246,27 +219,33 @@ def _deterministic_fallback(
 
     options = []
 
-    for i, rel in enumerate(RELATION_TYPES):
-        # Select handles (different for each option)
-        handle_a = handles_a[i % len(handles_a)]
-        handle_b = handles_b[i % len(handles_b)]
+    for i, template_set in enumerate(BIDIRECTIONAL_TEMPLATES):
+        # Select different handles for each option
+        # Use seed + offset to ensure variety
+        a_idx = (seed + i) % len(handles_a)
+        b_idx = (seed + i + 2) % len(handles_b)
 
-        # Select templates based on seed
-        fwd_idx = (seed + i * 3) % len(rel["forward_templates"])
-        ret_idx = (seed + i * 5) % len(rel["return_templates"])
+        handle_a = handles_a[a_idx]["quote"]
+        handle_b = handles_b[b_idx]["quote"]
 
-        fwd_template = rel["forward_templates"][fwd_idx]
-        ret_template = rel["return_templates"][ret_idx]
-
-        # Format with handles from OPPOSITE item
-        link_text_forward = fwd_template.format(handle=handle_b["quote"])
-        link_text_return = ret_template.format(handle=handle_a["quote"])
+        # Format templates with BOTH handles in each sentence
+        link_text_forward = template_set["forward"].format(
+            handle_a=handle_a,
+            handle_b=handle_b,
+        )
+        link_text_return = template_set["return"].format(
+            handle_a=handle_a,
+            handle_b=handle_b,
+        )
 
         options.append({
             "option_index": i + 1,
-            "relation_type": rel["id"],
+            "relation_type": template_set["id"],
             "link_text_forward": link_text_forward,
             "link_text_return": link_text_return,
+            # PASS 2: Track which handles were used for validation
+            "handle_a_used": handle_a,
+            "handle_b_used": handle_b,
         })
 
     return options

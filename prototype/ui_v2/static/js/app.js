@@ -33,6 +33,8 @@ let debugMode = false;  // Debug toggle state - shows candidate handles
 let hololoopOptions = null;  // 4 hololoop options for current pair
 let hololoopItemA = null;    // First Q item in hololoop pair
 let hololoopItemB = null;    // Second Q item in hololoop pair
+let showGatingHint = false;  // Show "Create one more item" hint after Q1
+let hololoopCreated = false; // Track if a hololoop was just created
 
 // Initialize
 init();
@@ -241,12 +243,14 @@ function updateUI() {
 function renderItems() {
   let html = '';
 
+  const qItems = items.filter(i => i.type === 'Q');
+
   for (const item of items) {
     html += renderItem(item);
 
-    // Render suggestions inline immediately after their parent Q Item (ontology fix)
-    if (currentSuggestions && currentSuggestionItemId === item.id) {
-      html += renderSuggestions(currentSuggestions, item.id);
+    // Queue Lattice: Show gating hint after first Q item (no suggestions!)
+    if (showGatingHint && qItems.length === 1 && item.id === qItems[0].id) {
+      html += renderGatingHint();
     }
 
     // Queue Lattice: Render hololoop options after the second Q item
@@ -257,7 +261,6 @@ function renderItems() {
 
   itemsFeed.innerHTML = html;
   addCopyButtonListeners();
-  addSuggestionListeners();
   addHololoopListeners();
   updateActiveItemHighlight();
 
@@ -293,6 +296,16 @@ function getTypeLabel(type) {
     case 'H': return 'Holologue';
     default: return type;
   }
+}
+
+// Queue Lattice: Render gating hint after first Q item
+function renderGatingHint() {
+  return `
+    <div class="gating-hint">
+      <span class="gating-icon">🔗</span>
+      <span class="gating-text">Create one more Item to unlock links.</span>
+    </div>
+  `;
 }
 
 function renderSuggestions(suggestions, itemId) {
@@ -345,11 +358,12 @@ function renderHololoopOptions(options, itemA, itemB) {
   const titleB = itemB.title || itemB.body?.slice(0, 40) || 'Item B';
 
   const optionsHtml = options.map((opt, i) => {
+    // Don't show relation type labels - just the hololink sentences
     return `
       <button class="hololoop-btn" data-index="${opt.option_index}" data-item-a="${itemA.id}" data-item-b="${itemB.id}">
-        <span class="hololoop-relation">${escapeHtml(opt.relation_type)}</span>
-        <span class="hololoop-forward">A→B: ${escapeHtml(opt.link_text_forward)}</span>
-        <span class="hololoop-return">B→A: ${escapeHtml(opt.link_text_return)}</span>
+        <span class="hololoop-forward">${escapeHtml(opt.link_text_forward)}</span>
+        <span class="hololoop-divider">↔</span>
+        <span class="hololoop-return">${escapeHtml(opt.link_text_return)}</span>
       </button>
     `;
   }).join('');
@@ -357,8 +371,7 @@ function renderHololoopOptions(options, itemA, itemB) {
   return `
     <div class="hololoop-container" data-item-a="${itemA.id}" data-item-b="${itemB.id}">
       <div class="hololoop-header">
-        <span class="hololoop-label">Connect these items</span>
-        <span class="hololoop-items">"${escapeHtml(titleA.slice(0, 30))}" ↔ "${escapeHtml(titleB.slice(0, 30))}"</span>
+        <span class="hololoop-label">Choose a link between these items</span>
       </div>
       <div class="hololoop-grid">
         ${optionsHtml}
@@ -554,23 +567,29 @@ async function createQueueItem() {
     // Add to local list
     items.push(data.item);
     updateCredits();
-    updateUI();
 
-    // Set this Q as the active item (ontology fix)
-    setActiveItem(data.item.id);
-
-    // Queue Lattice: Check if we have 2+ Q items to show hololoop options
+    // Queue Lattice: Check Q item count for gating
     const qItems = items.filter(i => i.type === 'Q');
-    if (qItems.length >= 2) {
-      // Get the two most recent Q items
+
+    if (qItems.length === 1) {
+      // First Q item - show gating hint, NO suggestions
+      showGatingHint = true;
+      hololoopCreated = false;
+      clearActiveItem();
+      updateUI();
+    } else if (qItems.length >= 2 && !hololoopCreated) {
+      // Second Q item (and no hololoop yet) - show hololoop options
+      showGatingHint = false;
       const itemB = qItems[qItems.length - 1];  // Just created
       const itemA = qItems[qItems.length - 2];  // Previous Q
 
-      // Fetch hololoop options between them
+      updateUI();
       await fetchHololoopOptions(itemA.id, itemB.id);
     } else {
-      // First Q item - show regular suggestions
-      await fetchSuggestions(data.item.id);
+      // Hololoop already exists - allow Q3+ creation freely
+      showGatingHint = false;
+      clearActiveItem();
+      updateUI();
     }
 
   } catch (e) {
@@ -674,20 +693,24 @@ async function createHololoop(btn) {
       hololoopItemA = null;
       hololoopItemB = null;
 
+      // Mark hololoop as created - unlocks Q3+ creation
+      hololoopCreated = true;
+      showGatingHint = false;
+
       // Clear active item state
       clearActiveItem();
 
       updateUI();
 
-      // Show success message (brief)
+      // Show success message
       const toast = document.createElement('div');
       toast.className = 'success-toast';
-      toast.textContent = `Hololoop created: ${data.hololoop.relation_type}`;
+      toast.textContent = 'Hololoop created! You can now add more items.';
       document.body.appendChild(toast);
       setTimeout(() => {
         toast.classList.add('fade-out');
         setTimeout(() => toast.remove(), 300);
-      }, 2000);
+      }, 3000);
 
     } else {
       throw new Error(data.error || 'Failed to create hololoop');
