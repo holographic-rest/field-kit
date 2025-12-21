@@ -16,6 +16,7 @@ QDPI = Literal["Q", "M", "D", "H"]
 ItemType = Literal["Q", "M", "D", "H"]
 Scope = Literal["private", "shared", "public"]
 BondStatus = Literal["draft", "executed"]
+BondKind = Literal["hololoop", "operator"]
 EventDirection = Literal["user→field", "system→field", "field→user"]
 ActorKind = Literal["user", "system", "agent"]
 
@@ -295,6 +296,10 @@ class Bond:
     last_error: Optional[ErrorInfo] = None
     created_by_actor: Optional[ActorRef] = None
     archived_at: Optional[str] = None
+    # Queue Lattice: hololoop support (PASS 1)
+    bond_kind: Optional[Literal["hololoop", "operator"]] = None
+    link_text_forward: Optional[str] = None  # A→B sentence for hololoops
+    link_text_return: Optional[str] = None   # B→A sentence for hololoops
 
     def to_dict(self) -> dict:
         d = {
@@ -323,6 +328,13 @@ class Bond:
             d["created_by_actor"] = self.created_by_actor.to_dict()
         if self.archived_at:
             d["archived_at"] = self.archived_at
+        # Queue Lattice: hololoop fields
+        if self.bond_kind:
+            d["bond_kind"] = self.bond_kind
+        if self.link_text_forward:
+            d["link_text_forward"] = self.link_text_forward
+        if self.link_text_return:
+            d["link_text_return"] = self.link_text_return
         return d
 
 

@@ -52,25 +52,25 @@ Important: **Canon is a derived projection** (curated lists on Episode), not a n
 
 The v0.1 event log uses ONLY these names:
 
-- `app.first_run.started`
-- `episode.created`
-- `field.opened`
-- `tutorial.started`
-- `item.created`
-- `bond.suggestions.presented`
-- `bond.draft_created`
-- `bond.run_requested`
-- `bond.executed`
-- `bond.execution_failed`
-- `holologue.run_requested`
-- `holologue.validation_failed`
-- `holologue.completed`
-- `holologue.failed`
-- `bond.proposals.presented`
-- `ledger.opened`
-- `store.commit`
-- `store.commit_failed`
-- `credits.delta`
+* `app.first_run.started`
+* `episode.created`
+* `field.opened`
+* `tutorial.started`
+* `item.created`
+* `bond.suggestions.presented`
+* `bond.draft_created`
+* `bond.run_requested`
+* `bond.executed`
+* `bond.execution_failed`
+* `holologue.run_requested`
+* `holologue.validation_failed`
+* `holologue.completed`
+* `holologue.failed`
+* `bond.proposals.presented`
+* `ledger.opened`
+* `store.commit`
+* `store.commit_failed`
+* `credits.delta`
 
 If you need intermediate UI phases (streaming, placeholder display, run started), those are **UI state only** and must NOT create new event names.
 

@@ -41,6 +41,7 @@ from cli import FieldKitCLI
 from fieldkit import get_store, reset_store
 from fieldkit.spin_recipes import generate_suggestions_for_item, generate_proposals_for_holologue
 from fieldkit.generation import get_generation_mode, get_last_generation_warning
+from fieldkit.hololoop_engine import generate_hololoop_options, options_to_bond_create_params
 
 # Get data directory from environment or use default
 DATA_DIR = os.environ.get("FIELDKIT_DATA_DIR")
@@ -363,6 +364,126 @@ def api_reset():
         shutil.rmtree(data_path)
 
     return jsonify({"status": "reset"})
+
+
+# === Queue Lattice: Hololoop API Routes ===
+
+@app.route("/api/hololoop/options")
+def api_hololoop_options():
+    """Get 4 hololoop options for connecting two items.
+
+    Query params:
+    - item_a: ID of first Queue Item
+    - item_b: ID of second Queue Item
+    - debug: Include debug info (optional)
+    """
+    cli = get_cli()
+    if not cli.store.is_initialized():
+        return jsonify({"error": "not_initialized"}), 400
+
+    item_a_id = request.args.get("item_a")
+    item_b_id = request.args.get("item_b")
+    debug_mode = request.args.get("debug", "").lower() == "true"
+
+    if not item_a_id or not item_b_id:
+        return jsonify({"error": "missing_item_ids"}), 400
+
+    item_a = cli.store.get_item(item_a_id)
+    item_b = cli.store.get_item(item_b_id)
+
+    if not item_a:
+        return jsonify({"error": "item_a_not_found"}), 404
+    if not item_b:
+        return jsonify({"error": "item_b_not_found"}), 404
+
+    # Generate 4 hololoop options
+    result = generate_hololoop_options(item_a, item_b, return_debug=debug_mode)
+
+    # Log event
+    cli._load_context()
+    cli.logger.bond_suggestions_presented(
+        cli._network_id, cli._episode_id,
+        item_id=item_a_id,
+        suggestions=[
+            {
+                "option_index": opt["option_index"],
+                "relation_type": opt["relation_type"],
+                "link_text_forward": opt["link_text_forward"],
+                "link_text_return": opt["link_text_return"],
+            }
+            for opt in result["options"]
+        ],
+    )
+
+    return jsonify(result)
+
+
+@app.route("/api/hololoop/create", methods=["POST"])
+def api_hololoop_create():
+    """Create a hololoop bond from a selected option.
+
+    Request body:
+    - item_a_id: ID of first Queue Item
+    - item_b_id: ID of second Queue Item
+    - option_index: Selected option (1-4)
+    - link_text_forward: A→B sentence (optional, uses generated if not provided)
+    - link_text_return: B→A sentence (optional, uses generated if not provided)
+    """
+    cli = get_cli()
+    if not cli.store.is_initialized():
+        return jsonify({"error": "not_initialized"}), 400
+
+    data = request.json or {}
+    item_a_id = data.get("item_a_id")
+    item_b_id = data.get("item_b_id")
+    option_index = data.get("option_index", 1)
+
+    if not item_a_id or not item_b_id:
+        return jsonify({"error": "missing_item_ids"}), 400
+
+    item_a = cli.store.get_item(item_a_id)
+    item_b = cli.store.get_item(item_b_id)
+
+    if not item_a:
+        return jsonify({"error": "item_a_not_found"}), 404
+    if not item_b:
+        return jsonify({"error": "item_b_not_found"}), 404
+
+    # Allow custom link text or use generated
+    link_text_forward = data.get("link_text_forward")
+    link_text_return = data.get("link_text_return")
+
+    if not link_text_forward or not link_text_return:
+        # Generate options and get the selected one
+        result = generate_hololoop_options(item_a, item_b)
+        options = result["options"]
+
+        if option_index < 1 or option_index > len(options):
+            return jsonify({"error": "invalid_option_index"}), 400
+
+        selected = options[option_index - 1]
+        link_text_forward = link_text_forward or selected["link_text_forward"]
+        link_text_return = link_text_return or selected["link_text_return"]
+        relation_type = selected["relation_type"]
+    else:
+        relation_type = data.get("relation_type", "extends")
+
+    # Create hololoop bond using CLI
+    bond_id = cli.cmd_hololoop_create(item_a_id, item_b_id, option_index)
+
+    bond = cli.store.get_bond(bond_id)
+
+    return jsonify({
+        "status": "created",
+        "bond": bond,
+        "hololoop": {
+            "item_a_id": item_a_id,
+            "item_b_id": item_b_id,
+            "link_text_forward": link_text_forward,
+            "link_text_return": link_text_return,
+            "relation_type": relation_type,
+        },
+    })
 
 
 @app.route("/api/ledger")

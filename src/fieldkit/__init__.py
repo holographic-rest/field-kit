@@ -12,6 +12,7 @@ from .schemas import (
     generate_bond_id, generate_event_id, now_iso,
     SYSTEM_ACTOR, USER_ACTOR,
     CANONICAL_EVENT_NAMES,
+    BondKind,  # Queue Lattice: hololoop vs operator
 )
 
 from .store_jsonl import Store, get_store, reset_store, dict_to_item, dict_to_bond, dict_to_episode
@@ -68,11 +69,17 @@ from .generation import (
     generate_holologue_output,
 )
 
+from .hololoop_engine import (
+    generate_hololoop_options,
+    options_to_bond_create_params,
+)
+
 __all__ = [
     # Schemas
     "Network", "Episode", "Item", "Bond", "QDPIEvent",
     "Vec3", "ActorRef", "ErrorInfo",
     "ItemProvenanceUser", "ItemProvenanceBond", "ItemProvenanceHolologue",
+    "BondKind",  # Queue Lattice: hololoop vs operator
     # ID generators
     "generate_network_id", "generate_episode_id", "generate_item_id",
     "generate_bond_id", "generate_event_id", "now_iso",
@@ -124,4 +131,7 @@ __all__ = [
     # Generation
     "generate_bond_output",
     "generate_holologue_output",
+    # Hololoop Engine (Queue Lattice)
+    "generate_hololoop_options",
+    "options_to_bond_create_params",
 ]

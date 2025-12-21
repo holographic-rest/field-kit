@@ -382,6 +382,10 @@ def dict_to_bond(d: dict) -> Bond:
         last_error=last_error,
         created_by_actor=actor,
         archived_at=d.get("archived_at"),
+        # Queue Lattice: hololoop fields
+        bond_kind=d.get("bond_kind"),
+        link_text_forward=d.get("link_text_forward"),
+        link_text_return=d.get("link_text_return"),
     )
 
 

@@ -29,6 +29,11 @@ let activeItemId = null;  // Track which Q Item is receiving prompts (ontology f
 let generationMode = 'stub';  // Sprint G2: Track generation mode for UI indicator
 let debugMode = false;  // Debug toggle state - shows candidate handles
 
+// Queue Lattice: Hololoop state
+let hololoopOptions = null;  // 4 hololoop options for current pair
+let hololoopItemA = null;    // First Q item in hololoop pair
+let hololoopItemB = null;    // Second Q item in hololoop pair
+
 // Initialize
 init();
 
@@ -243,11 +248,17 @@ function renderItems() {
     if (currentSuggestions && currentSuggestionItemId === item.id) {
       html += renderSuggestions(currentSuggestions, item.id);
     }
+
+    // Queue Lattice: Render hololoop options after the second Q item
+    if (hololoopOptions && hololoopItemB && item.id === hololoopItemB.id) {
+      html += renderHololoopOptions(hololoopOptions, hololoopItemA, hololoopItemB);
+    }
   }
 
   itemsFeed.innerHTML = html;
   addCopyButtonListeners();
   addSuggestionListeners();
+  addHololoopListeners();
   updateActiveItemHighlight();
 
   if (!userScrolledUp) {
@@ -328,6 +339,34 @@ function renderSuggestions(suggestions, itemId) {
   `;
 }
 
+// Queue Lattice: Render hololoop options (bidirectional links)
+function renderHololoopOptions(options, itemA, itemB) {
+  const titleA = itemA.title || itemA.body?.slice(0, 40) || 'Item A';
+  const titleB = itemB.title || itemB.body?.slice(0, 40) || 'Item B';
+
+  const optionsHtml = options.map((opt, i) => {
+    return `
+      <button class="hololoop-btn" data-index="${opt.option_index}" data-item-a="${itemA.id}" data-item-b="${itemB.id}">
+        <span class="hololoop-relation">${escapeHtml(opt.relation_type)}</span>
+        <span class="hololoop-forward">A→B: ${escapeHtml(opt.link_text_forward)}</span>
+        <span class="hololoop-return">B→A: ${escapeHtml(opt.link_text_return)}</span>
+      </button>
+    `;
+  }).join('');
+
+  return `
+    <div class="hololoop-container" data-item-a="${itemA.id}" data-item-b="${itemB.id}">
+      <div class="hololoop-header">
+        <span class="hololoop-label">Connect these items</span>
+        <span class="hololoop-items">"${escapeHtml(titleA.slice(0, 30))}" ↔ "${escapeHtml(titleB.slice(0, 30))}"</span>
+      </div>
+      <div class="hololoop-grid">
+        ${optionsHtml}
+      </div>
+    </div>
+  `;
+}
+
 function renderMarkdown(text) {
   if (!text) return '';
 
@@ -365,6 +404,13 @@ function addCopyButtonListeners() {
 function addSuggestionListeners() {
   document.querySelectorAll('.suggestion-btn').forEach(btn => {
     btn.addEventListener('click', () => runSuggestion(btn));
+  });
+}
+
+// Queue Lattice: Hololoop button listeners
+function addHololoopListeners() {
+  document.querySelectorAll('.hololoop-btn').forEach(btn => {
+    btn.addEventListener('click', () => createHololoop(btn));
   });
 }
 
@@ -513,8 +559,19 @@ async function createQueueItem() {
     // Set this Q as the active item (ontology fix)
     setActiveItem(data.item.id);
 
-    // Fetch suggestions for the new item
-    await fetchSuggestions(data.item.id);
+    // Queue Lattice: Check if we have 2+ Q items to show hololoop options
+    const qItems = items.filter(i => i.type === 'Q');
+    if (qItems.length >= 2) {
+      // Get the two most recent Q items
+      const itemB = qItems[qItems.length - 1];  // Just created
+      const itemA = qItems[qItems.length - 2];  // Previous Q
+
+      // Fetch hololoop options between them
+      await fetchHololoopOptions(itemA.id, itemB.id);
+    } else {
+      // First Q item - show regular suggestions
+      await fetchSuggestions(data.item.id);
+    }
 
   } catch (e) {
     console.error('Create item error:', e);
@@ -554,6 +611,95 @@ async function fetchSuggestions(itemId) {
   } catch (e) {
     console.error('Fetch suggestions error:', e);
   }
+}
+
+// Queue Lattice: Fetch hololoop options for two Q items
+async function fetchHololoopOptions(itemAId, itemBId) {
+  try {
+    const res = await fetch(`/api/hololoop/options?item_a=${itemAId}&item_b=${itemBId}&debug=true`);
+    const data = await res.json();
+
+    if (data.options && data.options.length > 0) {
+      hololoopOptions = data.options;
+      hololoopItemA = items.find(i => i.id === itemAId);
+      hololoopItemB = items.find(i => i.id === itemBId);
+
+      // Clear regular suggestions when showing hololoops
+      currentSuggestions = null;
+      currentSuggestionItemId = null;
+      currentDebugInfo = null;
+
+      renderItems();
+    }
+  } catch (e) {
+    console.error('Fetch hololoop options error:', e);
+  }
+}
+
+// Queue Lattice: Create a hololoop from selected option
+async function createHololoop(btn) {
+  if (isProcessing) return;
+
+  const optionIndex = parseInt(btn.dataset.index);
+  const itemAId = btn.dataset.itemA;
+  const itemBId = btn.dataset.itemB;
+
+  isProcessing = true;
+
+  // Mark button as running
+  btn.classList.add('running');
+  btn.disabled = true;
+
+  // Disable other hololoop buttons
+  document.querySelectorAll('.hololoop-btn').forEach(b => {
+    if (b !== btn) b.disabled = true;
+  });
+
+  try {
+    const res = await fetch('/api/hololoop/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        item_a_id: itemAId,
+        item_b_id: itemBId,
+        option_index: optionIndex,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (data.status === 'created') {
+      // Clear hololoop state
+      hololoopOptions = null;
+      hololoopItemA = null;
+      hololoopItemB = null;
+
+      // Clear active item state
+      clearActiveItem();
+
+      updateUI();
+
+      // Show success message (brief)
+      const toast = document.createElement('div');
+      toast.className = 'success-toast';
+      toast.textContent = `Hololoop created: ${data.hololoop.relation_type}`;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 300);
+      }, 2000);
+
+    } else {
+      throw new Error(data.error || 'Failed to create hololoop');
+    }
+
+  } catch (e) {
+    console.error('Create hololoop error:', e);
+    showWarningToast('Failed to create hololoop: ' + e.message);
+  }
+
+  isProcessing = false;
+  sendBtn.disabled = !inputEl.value.trim();
 }
 
 async function runSuggestion(btn) {

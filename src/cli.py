@@ -54,6 +54,9 @@ from fieldkit import (
     # Generation
     generate_bond_output,
     generate_holologue_output,
+    # Hololoop Engine (Queue Lattice)
+    generate_hololoop_options,
+    options_to_bond_create_params,
 )
 
 
@@ -510,6 +513,137 @@ class FieldKitCLI:
         print(f"  Output Item: {output_item_id} (type={output_type})")
         print(f"  Credits: {self._credits_balance}")
         return output_item_id
+
+    # === Queue Lattice: Hololoop Commands ===
+
+    def cmd_hololoop_options(self, item_a_id: str, item_b_id: str):
+        """
+        Get 4 hololoop options for connecting two Queue Items.
+
+        Events logged:
+        - bond.suggestions.presented (with hololoop options)
+        """
+        self._require_init()
+
+        # Get both items
+        item_a = self.store.get_item(item_a_id)
+        item_b = self.store.get_item(item_b_id)
+
+        if not item_a:
+            print(f"Error: Item {item_a_id} not found.")
+            sys.exit(1)
+        if not item_b:
+            print(f"Error: Item {item_b_id} not found.")
+            sys.exit(1)
+
+        # Generate 4 hololoop options
+        result = generate_hololoop_options(item_a, item_b)
+
+        # Log event (bond.suggestions.presented with hololoop options)
+        self.logger.bond_suggestions_presented(
+            self._network_id, self._episode_id,
+            item_id=item_a_id,
+            suggestions=[
+                {
+                    "option_index": opt["option_index"],
+                    "relation_type": opt["relation_type"],
+                    "link_text_forward": opt["link_text_forward"],
+                    "link_text_return": opt["link_text_return"],
+                }
+                for opt in result["options"]
+            ],
+        )
+
+        print(f"Hololoop options for {item_a_id} ↔ {item_b_id}:")
+        for opt in result["options"]:
+            print(f"  {opt['option_index']}. [{opt['relation_type']}]")
+            print(f"     A→B: {opt['link_text_forward']}")
+            print(f"     B→A: {opt['link_text_return']}")
+
+        return result
+
+    def cmd_hololoop_create(
+        self,
+        item_a_id: str,
+        item_b_id: str,
+        option_index: int,
+    ):
+        """
+        Create a hololoop Bond from a selected option.
+
+        A hololoop is a link-only bond that is never executed.
+        It has bond_kind="hololoop", status="draft", output_item_id=null.
+
+        Events logged:
+        - bond.draft_created
+        - store.commit
+        """
+        self._require_init()
+
+        # Get both items
+        item_a = self.store.get_item(item_a_id)
+        item_b = self.store.get_item(item_b_id)
+
+        if not item_a:
+            print(f"Error: Item {item_a_id} not found.")
+            sys.exit(1)
+        if not item_b:
+            print(f"Error: Item {item_b_id} not found.")
+            sys.exit(1)
+
+        # Generate options and get the selected one
+        result = generate_hololoop_options(item_a, item_b)
+        options = result["options"]
+
+        if option_index < 1 or option_index > len(options):
+            print(f"Error: Invalid option index {option_index}. Must be 1-{len(options)}.")
+            sys.exit(1)
+
+        selected = options[option_index - 1]
+        params = options_to_bond_create_params(selected, item_a_id, item_b_id)
+
+        bond_id = generate_bond_id()
+        now = now_iso()
+
+        bond = Bond(
+            id=bond_id,
+            network_id=self._network_id,
+            episode_id=self._episode_id,
+            scope="private",
+            input_item_ids=params["input_item_ids"],
+            prompt_text=params["prompt_text"],
+            intent_type=params["intent_type"],
+            status="draft",
+            output_item_id=None,
+            created_by="user",
+            created_by_actor=USER_ACTOR,
+            created_at=now,
+            updated_at=now,
+            # Queue Lattice: hololoop-specific fields
+            bond_kind="hololoop",
+            link_text_forward=params["link_text_forward"],
+            link_text_return=params["link_text_return"],
+        )
+        self.store.upsert_bond(bond)
+
+        # Log event
+        self.logger.bond_draft_created(
+            self._network_id, self._episode_id,
+            bond_id=bond_id,
+            input_item_ids=params["input_item_ids"],
+            prompt_text=params["prompt_text"],
+            origin=f"hololoop:{selected['relation_type']}",
+        )
+
+        # Commit
+        self.logger.store_commit(self._network_id, self._episode_id)
+
+        print(f"Hololoop created: {bond_id}")
+        print(f"  Items: {item_a_id} ↔ {item_b_id}")
+        print(f"  Relation: {selected['relation_type']}")
+        print(f"  A→B: {params['link_text_forward']}")
+        print(f"  B→A: {params['link_text_return']}")
+        return bond_id
 
     def cmd_holologue_run(
         self,
