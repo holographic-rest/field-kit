@@ -3,20 +3,58 @@ Field-Kit v0.1 Generation Backend
 
 Provides real content generation for Bond and Holologue outputs.
 
+Sprint G2: Stub generation is now content-derived, not generic boilerplate.
+
 Backends:
-1. Stub backend (default, no network): Deterministic structured text based on recipe_id
+1. Stub backend (default, no network): Content-derived structured text
 2. OpenAI backend (optional): Uses OPENAI_API_KEY if set
 
 Environment variables:
 - OPENAI_API_KEY: If set, enables OpenAI backend
 - OPENAI_MODEL: Model to use (default: gpt-4o-mini)
+
+Generation Mode:
+- get_generation_mode() returns "stub" or "openai:<model>"
+- UI can display this to show what's generating content
 """
 
 import os
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
-from .spin_recipes import extract_anchor_phrase
+from .spin_recipes import extract_anchor_phrase, extract_content_fingerprint
+
+
+# === Generation Mode ===
+
+def get_generation_mode() -> str:
+    """
+    Get the current generation mode for UI display.
+
+    Returns:
+        "stub" if no OpenAI key
+        "openai:<model>" if OpenAI is configured
+    """
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if api_key:
+        model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+        return f"openai:{model}"
+    return "stub"
+
+
+# Track last generation result for error reporting
+_last_generation_warning: Optional[str] = None
+
+
+def get_last_generation_warning() -> Optional[str]:
+    """Get the last generation warning (e.g., OpenAI fallback to stub)."""
+    return _last_generation_warning
+
+
+def _set_generation_warning(warning: Optional[str]):
+    """Set generation warning for UI to display."""
+    global _last_generation_warning
+    _last_generation_warning = warning
 
 
 # === Stub Templates by Recipe ===
@@ -386,6 +424,99 @@ Agreed on MVP scope with basic monitoring, full feature in next quarter.
 ---
 *Based on: {snippet}*
 """,
+
+    # Sprint G: 4 diverse output shape templates
+    "spec_fragment_rules": """# Spec Rules: {anchor}
+
+## Rules
+
+### MUST Requirements
+{must_rules}
+
+### MUST NOT Constraints
+{must_not_rules}
+
+## Tests
+
+### Verification Tests
+{verification_tests}
+
+### Violation Detection
+- Test: Detect if any MUST NOT is violated
+- Expected: System should reject or warn
+
+---
+*Derived from: {snippet}*
+""",
+
+    "architecture_map": """# Architecture Map: {anchor}
+
+## Layer Structure
+
+| Layer | Responsibility | Inputs | Outputs |
+|-------|---------------|--------|---------|
+{layer_rows}
+
+## Key Interfaces
+
+{interfaces}
+
+## Data Flow
+
+1. Input arrives at top layer
+2. Processing flows through middle layers
+3. Output emerges from bottom layer
+
+---
+*Mapped from: {snippet}*
+""",
+
+    "interaction_trace": """# Interaction Trace: {anchor}
+
+## Trace Steps
+
+{trace_steps}
+
+## State Changes
+
+### Before
+- Initial state: Ready to process
+
+### After
+- Final state: Processing complete
+
+## Key Observations
+
+- Each step modifies system state
+- Events are logged for audit trail
+- Errors are caught and handled gracefully
+
+---
+*Traced from: {snippet}*
+""",
+
+    "learning_loop_metrics": """# Learning Loop: {anchor}
+
+## Signals
+
+{learning_signals}
+
+## Metrics
+
+| Metric | How to Measure | Target |
+|--------|---------------|--------|
+{metric_rows}
+
+## Feedback Path
+
+1. Observe: Collect signals from system behavior
+2. Analyze: Identify patterns and anomalies
+3. Adapt: Adjust parameters based on analysis
+4. Verify: Confirm improvement in target metrics
+
+---
+*Signals defined for: {snippet}*
+""",
 }
 
 # Holologue templates by artifact kind
@@ -570,52 +701,400 @@ def _get_snippet(body: Optional[str], max_len: int = 100) -> str:
     return snippet
 
 
+def _extract_content_bullets(body: Optional[str], max_bullets: int = 5) -> List[str]:
+    """
+    Extract content-derived bullet points from body text.
+
+    Sprint G2: Stub generation must be content-derived, not generic.
+    This function extracts actual phrases from the input to use in output.
+    """
+    if not body:
+        return []
+
+    bullets = []
+    lines = []
+
+    for line in body.split('\n'):
+        line = line.strip()
+        if not line:
+            continue
+        if line.lower().startswith('title:'):
+            continue
+        if line.upper().startswith('PAGE'):
+            continue
+        lines.append(line)
+
+    # Strategy 1: Look for existing bullets (- or *)
+    for line in lines:
+        if line.startswith('- ') or line.startswith('* '):
+            bullet_text = line[2:].strip()
+            if len(bullet_text) > 10:
+                bullets.append(bullet_text)
+
+    # Strategy 2: Split sentences if no bullets found
+    if not bullets and lines:
+        full_text = ' '.join(lines)
+        # Split on periods followed by space and capital
+        sentences = re.split(r'\.\s+(?=[A-Z])', full_text)
+        for sent in sentences:
+            sent = sent.strip().rstrip('.')
+            if len(sent) > 15:
+                bullets.append(sent)
+
+    # Strategy 3: Extract key phrases if still not enough
+    if len(bullets) < 2 and lines:
+        # Take chunks from lines
+        for line in lines[:max_bullets]:
+            if len(line) > 20 and line not in bullets:
+                bullets.append(line[:80] + ("..." if len(line) > 80 else ""))
+
+    return bullets[:max_bullets]
+
+
 def _generate_stub_bond_output(
     prompt_text: str,
     inputs: List[Dict[str, Any]],
     output_type: str,
     recipe_id: Optional[str],
 ) -> str:
-    """Generate structured output using stub templates."""
+    """
+    Generate content-derived output using stub templates.
 
-    # Get anchor and snippet from first input
+    Sprint G2: Output must include verbatim phrases from input body.
+    Generic boilerplate like "Verify the core assumption" is NOT allowed
+    unless that concept is actually in the source body.
+    """
+    # Get anchor, snippet, and fingerprint from first input
     if inputs:
         first_input = inputs[0]
-        anchor = extract_anchor_phrase(
-            first_input.get("title", ""),
-            first_input.get("body"),
-        )
-        snippet = _get_snippet(first_input.get("body"))
+        title = first_input.get("title", "")
+        body = first_input.get("body")
+        anchor = extract_anchor_phrase(title, body)
+        snippet = _get_snippet(body)
+        fingerprint = extract_content_fingerprint(title, body)
+        content_bullets = _extract_content_bullets(body)
+        key_terms = fingerprint.get("key_terms", [])
     else:
         anchor = "this item"
         snippet = "(no input provided)"
+        content_bullets = []
+        key_terms = []
+        fingerprint = {"key_phrases": [], "key_terms": [], "content_topic": "", "body_excerpt": ""}
 
-    # Select template based on recipe_id
+    # Sprint G: Get key_phrases for content-shaped diverse outputs
+    key_phrases = fingerprint.get("key_phrases", [])
+
+    # Sprint G: Handle content-derived recipe types with full content derivation
+    if recipe_id == "spec_fragment_rules":
+        return _enhance_spec_fragment_rules(anchor, snippet, key_phrases, content_bullets)
+    elif recipe_id == "architecture_map":
+        return _enhance_architecture_map(anchor, snippet, key_phrases)
+    elif recipe_id == "interaction_trace":
+        return _enhance_interaction_trace(anchor, snippet, key_phrases, content_bullets)
+    elif recipe_id == "learning_loop_metrics":
+        return _enhance_learning_loop_metrics(anchor, snippet, key_phrases)
+    elif recipe_id == "clarify_to_testable_claim":
+        return _enhance_clarify_claim(anchor, snippet, key_phrases, content_bullets)
+
+    # Select template based on recipe_id and generate content-derived output
     template = STUB_TEMPLATES.get(recipe_id)
 
     if template:
-        return template.format(anchor=anchor, snippet=snippet)
+        # For certain recipes, we enhance with content-derived bullets
+        output = template.format(anchor=anchor, snippet=snippet)
 
-    # Fallback: generic structured output
+        # Sprint G2: Replace generic bullets with content-derived ones
+        if content_bullets and recipe_id == "expand_to_checklist":
+            output = _enhance_checklist_with_content(output, content_bullets, anchor)
+        elif content_bullets and recipe_id == "decision_with_reasons":
+            output = _enhance_decision_with_content(output, content_bullets, anchor)
+        elif content_bullets and recipe_id == "ground_in_experiment":
+            output = _enhance_experiment_with_content(output, content_bullets, anchor)
+        elif content_bullets and recipe_id == "derive_min_schema":
+            output = _enhance_schema_with_content(output, content_bullets, key_terms, anchor)
+
+        return output
+
+    # Fallback: content-derived structured output
+    bullet_str = "\n".join(f"- {b}" for b in content_bullets[:3]) if content_bullets else "- (no specific content extracted)"
+
     return f"""# Output: {anchor}
 
 ## Analysis
-Based on the prompt: {prompt_text[:100]}...
+{snippet}
 
-## Key Points
-- Primary consideration from the input
-- Secondary implications to explore
-- Potential areas for follow-up
+## Key Points from Source
+{bullet_str}
 
-## Recommendations
-1. Review the generated content for accuracy
-2. Refine based on specific needs
-3. Iterate as necessary
+## Derived Observations
+1. The content focuses on: {anchor}
+2. Key themes: {', '.join(key_terms[:3]) if key_terms else 'general concepts'}
+3. Consider follow-up on the points above
 
 ---
 *Generated for: {anchor}*
 *Based on: {snippet}*
 """
+
+
+def _enhance_checklist_with_content(output: str, bullets: List[str], anchor: str) -> str:
+    """Replace generic checklist items with content-derived ones."""
+    # Build content-derived checklist
+    checklist_items = []
+    for i, bullet in enumerate(bullets[:5]):
+        # Truncate long bullets
+        if len(bullet) > 60:
+            bullet = bullet[:57] + "..."
+        checklist_items.append(f"- [ ] Verify: {bullet}")
+
+    # Fill remaining slots if needed
+    while len(checklist_items) < 5:
+        checklist_items.append(f"- [ ] Review {anchor} against requirements")
+
+    new_checklist = "\n".join(checklist_items)
+
+    # Replace the generic checklist section
+    output = re.sub(
+        r'- \[ \] Verify the core assumption holds.*?(?=\n\n|## )',
+        new_checklist + "\n\n",
+        output,
+        flags=re.DOTALL
+    )
+    return output
+
+
+def _enhance_decision_with_content(output: str, bullets: List[str], anchor: str) -> str:
+    """Enhance decision note with content-derived rationale."""
+    if len(bullets) >= 2:
+        # Use actual content for rationale
+        rationale_items = []
+        for i, bullet in enumerate(bullets[:4], 1):
+            if len(bullet) > 50:
+                bullet = bullet[:47] + "..."
+            rationale_items.append(f"{i}. {bullet}")
+
+        new_rationale = "\n".join(rationale_items)
+
+        output = re.sub(
+            r'## Rationale\n1\. Aligns with project goals.*?(?=\n\n## )',
+            f"## Rationale\n{new_rationale}\n\n",
+            output,
+            flags=re.DOTALL
+        )
+    return output
+
+
+def _enhance_experiment_with_content(output: str, bullets: List[str], anchor: str) -> str:
+    """Enhance experiment design with content-derived hypothesis."""
+    if bullets:
+        first_bullet = bullets[0]
+        if len(first_bullet) > 80:
+            first_bullet = first_bullet[:77] + "..."
+
+        output = re.sub(
+            r'## Hypothesis\nIf we implement.*?(?=\n\n## )',
+            f"## Hypothesis\nIf we validate \"{first_bullet}\", then we can proceed with {anchor}.\n\n",
+            output,
+            flags=re.DOTALL
+        )
+    return output
+
+
+def _enhance_schema_with_content(output: str, bullets: List[str], key_terms: List[str], anchor: str) -> str:
+    """Enhance schema with content-derived entity names."""
+    if key_terms:
+        # Use key terms as entity names
+        entity1 = key_terms[0].title() if key_terms else "PrimaryEntity"
+        entity2 = key_terms[1].title() if len(key_terms) > 1 else "RelatedEntity"
+
+        output = output.replace("PrimaryEntity", entity1)
+        output = output.replace("RelatedEntity", entity2)
+    return output
+
+
+# Sprint G: Content-derived enhancers for diverse recipe outputs
+
+def _enhance_clarify_claim(anchor: str, snippet: str, key_phrases: List[str], bullets: List[str]) -> str:
+    """Generate content-derived testable claim with key phrases."""
+    # Build claim that references key phrases
+    claim_parts = []
+    if key_phrases:
+        for phrase in key_phrases[:3]:
+            claim_parts.append(phrase)
+
+    claim_phrase = ", ".join(claim_parts) if claim_parts else anchor
+
+    # Build test criteria from content
+    test_criteria = []
+    for i, phrase in enumerate(key_phrases[:3], 1):
+        test_criteria.append(f"- **Test {i}**: Verify that {phrase} behaves as specified")
+    if not test_criteria:
+        test_criteria = [f"- **Test 1**: Verify {anchor} works correctly"]
+
+    # Include bullets as evidence
+    evidence = []
+    for bullet in bullets[:3]:
+        short_bullet = bullet[:60] + "..." if len(bullet) > 60 else bullet
+        evidence.append(f"- {short_bullet}")
+    evidence_str = "\n".join(evidence) if evidence else f"- {snippet}"
+
+    return f"""# Testable Claim: {anchor}
+
+## Original Statement
+{snippet}
+
+## Key Concepts Referenced
+{claim_phrase}
+
+## Clarified Claim
+**Claim**: The system correctly implements {claim_phrase} as described in the source content.
+
+## Test Criteria
+{chr(10).join(test_criteria)}
+
+## Evidence from Source
+{evidence_str}
+
+## Falsifiability
+This claim can be disproven by demonstrating that any of the referenced concepts ({claim_phrase}) do not function as described.
+
+---
+*Reformulated for testability*
+"""
+
+
+def _enhance_spec_fragment_rules(anchor: str, snippet: str, key_phrases: List[str], bullets: List[str]) -> str:
+    """Generate content-derived MUST/MUST NOT rules and tests."""
+    # Build MUST rules from key phrases and bullets
+    must_rules = []
+    for i, phrase in enumerate(key_phrases[:4]):
+        must_rules.append(f"- MUST: Support {phrase} as described")
+    for bullet in bullets[:2]:
+        if len(bullet) > 60:
+            bullet = bullet[:57] + "..."
+        must_rules.append(f"- MUST: Implement \"{bullet}\"")
+
+    if not must_rules:
+        must_rules = [f"- MUST: Implement {anchor} correctly"]
+
+    # Build MUST NOT rules
+    must_not_rules = [
+        f"- MUST NOT: Violate the core invariants of {anchor}",
+        f"- MUST NOT: Skip validation of {key_phrases[0] if key_phrases else anchor}",
+        "- MUST NOT: Introduce breaking changes without migration path",
+    ]
+
+    # Build verification tests
+    verification_tests = []
+    for i, phrase in enumerate(key_phrases[:3], 1):
+        verification_tests.append(f"- Test {i}: Verify {phrase} behaves as specified")
+    if not verification_tests:
+        verification_tests = [f"- Test 1: Verify {anchor} works end-to-end"]
+
+    template = STUB_TEMPLATES["spec_fragment_rules"]
+    return template.format(
+        anchor=anchor,
+        snippet=snippet,
+        must_rules="\n".join(must_rules),
+        must_not_rules="\n".join(must_not_rules),
+        verification_tests="\n".join(verification_tests),
+    )
+
+
+def _enhance_architecture_map(anchor: str, snippet: str, key_phrases: List[str]) -> str:
+    """Generate content-derived architecture map."""
+    # Build layer rows from key phrases
+    layer_rows = []
+    layer_names = ["Input", "Processing", "Storage", "Output"]
+    for i, layer in enumerate(layer_names):
+        phrase = key_phrases[i] if i < len(key_phrases) else anchor
+        layer_rows.append(f"| {layer} | Handle {phrase} | Data/Events | Processed {phrase} |")
+
+    # Build interfaces from key phrases
+    interfaces = []
+    if len(key_phrases) >= 2:
+        interfaces.append(f"- {key_phrases[0]} → {key_phrases[1]}: Data transformation")
+        if len(key_phrases) >= 3:
+            interfaces.append(f"- {key_phrases[1]} → {key_phrases[2]}: Event propagation")
+    else:
+        interfaces.append(f"- {anchor} → Storage: Persistence layer")
+
+    template = STUB_TEMPLATES["architecture_map"]
+    return template.format(
+        anchor=anchor,
+        snippet=snippet,
+        layer_rows="\n".join(layer_rows),
+        interfaces="\n".join(interfaces),
+    )
+
+
+def _enhance_interaction_trace(anchor: str, snippet: str, key_phrases: List[str], bullets: List[str]) -> str:
+    """Generate content-derived interaction trace."""
+    trace_steps = []
+
+    # Use key phrases to build meaningful trace steps
+    step_num = 1
+    for phrase in key_phrases[:5]:
+        trace_steps.append(f"{step_num}. User/System initiates: {phrase}")
+        step_num += 1
+        trace_steps.append(f"{step_num}. System processes {phrase} request")
+        step_num += 1
+
+    # Add steps from bullets if we have room
+    for bullet in bullets[:3]:
+        if step_num <= 14:
+            short_bullet = bullet[:50] + "..." if len(bullet) > 50 else bullet
+            trace_steps.append(f"{step_num}. Execute: {short_bullet}")
+            step_num += 1
+
+    # Pad to at least 10 steps
+    while len(trace_steps) < 10:
+        trace_steps.append(f"{len(trace_steps) + 1}. Continue processing {anchor}")
+
+    template = STUB_TEMPLATES["interaction_trace"]
+    return template.format(
+        anchor=anchor,
+        snippet=snippet,
+        trace_steps="\n".join(trace_steps[:14]),
+    )
+
+
+def _enhance_learning_loop_metrics(anchor: str, snippet: str, key_phrases: List[str]) -> str:
+    """Generate content-derived learning signals and metrics."""
+    # Build learning signals from key phrases
+    signals = []
+    for i, phrase in enumerate(key_phrases[:4], 1):
+        if i == 1:
+            signals.append(f"- Signal {i}: Observe success rate of {phrase}")
+        elif i == 2:
+            signals.append(f"- Signal {i}: Track errors related to {phrase}")
+        else:
+            signals.append(f"- Signal {i}: Monitor performance of {phrase}")
+
+    if not signals:
+        signals = [f"- Signal 1: Observe behavior of {anchor}"]
+
+    # Build metric rows
+    metric_rows = []
+    metrics = [
+        ("Success Rate", "Count successes / total attempts", "> 95%"),
+        ("Error Rate", "Count failures / total attempts", "< 5%"),
+        ("Latency", "Measure response time", "< 200ms"),
+    ]
+    for metric, measure, target in metrics:
+        metric_rows.append(f"| {metric} | {measure} | {target} |")
+
+    # Add content-derived metric if we have key phrases
+    if key_phrases:
+        metric_rows.append(f"| {key_phrases[0]} Coverage | Track coverage | > 80% |")
+
+    template = STUB_TEMPLATES["learning_loop_metrics"]
+    return template.format(
+        anchor=anchor,
+        snippet=snippet,
+        learning_signals="\n".join(signals),
+        metric_rows="\n".join(metric_rows),
+    )
 
 
 def _generate_stub_holologue_output(
@@ -811,6 +1290,8 @@ def generate_bond_output(
 
     Tries OpenAI if OPENAI_API_KEY is set, falls back to stub.
 
+    Sprint G2: Tracks warnings when OpenAI fails and falls back to stub.
+
     Args:
         prompt_text: The prompt text for generation
         inputs: List of input Item dicts
@@ -820,6 +1301,8 @@ def generate_bond_output(
     Returns:
         Generated body text for the output Item
     """
+    _set_generation_warning(None)  # Clear previous warning
+
     # Try OpenAI first if available
     client = _get_openai_client()
     if client:
@@ -828,6 +1311,8 @@ def generate_bond_output(
         )
         if result:
             return result
+        # OpenAI failed, set warning for UI
+        _set_generation_warning("OpenAI failed → using stub mode")
 
     # Fall back to stub
     return _generate_stub_bond_output(prompt_text, inputs, output_type, recipe_id)
@@ -842,6 +1327,8 @@ def generate_holologue_output(
 
     Tries OpenAI if OPENAI_API_KEY is set, falls back to stub.
 
+    Sprint G2: Tracks warnings when OpenAI fails and falls back to stub.
+
     Args:
         kind: Artifact kind (plan, checklist, spec_fragment, experiment, story_beat)
         selected_items: List of selected Item dicts
@@ -849,12 +1336,16 @@ def generate_holologue_output(
     Returns:
         Generated body text for the H output Item
     """
+    _set_generation_warning(None)  # Clear previous warning
+
     # Try OpenAI first if available
     client = _get_openai_client()
     if client:
         result = _generate_openai_holologue_output(client, kind, selected_items)
         if result:
             return result
+        # OpenAI failed, set warning for UI
+        _set_generation_warning("OpenAI failed → using stub mode")
 
     # Fall back to stub
     return _generate_stub_holologue_output(kind, selected_items)

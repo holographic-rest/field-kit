@@ -49,12 +49,12 @@ def test_sprint_d_spin_recipes():
     print("STEP 1: Verify recipe registry")
     print("-" * 70)
 
-    # 22 total recipes: 8 + 6 + 6 + 2
-    assert len(MONOLOGUE_RECIPES) == 8, f"Expected 8 Monologue recipes, got {len(MONOLOGUE_RECIPES)}"
+    # 26 total recipes: 12 (8 original + 4 Sprint G) + 6 + 6 + 2
+    assert len(MONOLOGUE_RECIPES) == 12, f"Expected 12 Monologue recipes (8 + 4 Sprint G), got {len(MONOLOGUE_RECIPES)}"
     assert len(DIALOGUE_RECIPES) == 6, f"Expected 6 Dialogue recipes, got {len(DIALOGUE_RECIPES)}"
     assert len(HOLOLOGUE_RECIPES) == 6, f"Expected 6 Holologue recipes, got {len(HOLOLOGUE_RECIPES)}"
     assert len(PROPOSAL_GENERATOR_RECIPES) == 2, f"Expected 2 proposal generator recipes, got {len(PROPOSAL_GENERATOR_RECIPES)}"
-    assert len(ALL_RECIPES) == 22, f"Expected 22 total recipes, got {len(ALL_RECIPES)}"
+    assert len(ALL_RECIPES) == 26, f"Expected 26 total recipes, got {len(ALL_RECIPES)}"
 
     print(f"  Monologue recipes: {len(MONOLOGUE_RECIPES)}")
     print(f"  Dialogue recipes: {len(DIALOGUE_RECIPES)}")

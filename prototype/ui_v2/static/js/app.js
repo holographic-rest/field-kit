@@ -24,6 +24,8 @@ let currentSuggestions = null;
 let currentSuggestionItemId = null;
 let isProcessing = false;
 let userScrolledUp = false;
+let activeItemId = null;  // Track which Q Item is receiving prompts (ontology fix)
+let generationMode = 'stub';  // Sprint G2: Track generation mode for UI indicator
 
 // Initialize
 init();
@@ -46,10 +48,58 @@ async function checkAndInit() {
       await fetch('/api/init', { method: 'POST' });
     }
 
+    // Sprint G2: Update generation mode indicator
+    if (data.generation_mode) {
+      generationMode = data.generation_mode;
+      updateGenerationModeIndicator();
+    }
+
     await updateCredits();
   } catch (e) {
     console.error('Init error:', e);
   }
+}
+
+// Sprint G2: Update generation mode indicator in header
+function updateGenerationModeIndicator() {
+  let indicator = document.getElementById('genModeIndicator');
+  if (!indicator) {
+    // Create indicator element in header
+    const headerRight = document.querySelector('.header-right');
+    if (headerRight) {
+      indicator = document.createElement('div');
+      indicator.id = 'genModeIndicator';
+      indicator.className = 'gen-mode-indicator';
+      headerRight.insertBefore(indicator, headerRight.firstChild);
+    }
+  }
+  if (indicator) {
+    const modeText = generationMode.startsWith('openai:')
+      ? `GEN=${generationMode.replace('openai:', 'openai:')}`
+      : 'GEN=stub';
+    indicator.textContent = modeText;
+    indicator.className = generationMode.startsWith('openai:')
+      ? 'gen-mode-indicator gen-openai'
+      : 'gen-mode-indicator gen-stub';
+  }
+}
+
+// Sprint G2: Show warning toast
+function showWarningToast(message) {
+  // Remove any existing toast
+  const existing = document.querySelector('.warning-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.className = 'warning-toast';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  // Auto-remove after 5 seconds
+  setTimeout(() => {
+    toast.classList.add('fade-out');
+    setTimeout(() => toast.remove(), 300);
+  }, 5000);
 }
 
 async function loadItems() {
@@ -83,12 +133,12 @@ function setupEventListeners() {
   inputEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      createQueueItem();
+      handleComposerSubmit();
     }
   });
 
-  sendBtn.addEventListener('click', createQueueItem);
-  newSessionBtn.addEventListener('click', () => location.reload());
+  sendBtn.addEventListener('click', handleComposerSubmit);
+  newSessionBtn.addEventListener('click', handleNewSession);
 
   jumpToLatestBtn.addEventListener('click', () => {
     scrollToBottom();
@@ -152,16 +202,17 @@ function renderItems() {
 
   for (const item of items) {
     html += renderItem(item);
-  }
 
-  // Add suggestions if we have them
-  if (currentSuggestions && currentSuggestionItemId) {
-    html += renderSuggestions(currentSuggestions, currentSuggestionItemId);
+    // Render suggestions inline immediately after their parent Q Item (ontology fix)
+    if (currentSuggestions && currentSuggestionItemId === item.id) {
+      html += renderSuggestions(currentSuggestions, item.id);
+    }
   }
 
   itemsFeed.innerHTML = html;
   addCopyButtonListeners();
   addSuggestionListeners();
+  updateActiveItemHighlight();
 
   if (!userScrolledUp) {
     scrollToBottom();
@@ -198,15 +249,20 @@ function getTypeLabel(type) {
 }
 
 function renderSuggestions(suggestions, itemId) {
-  const suggestionsHtml = suggestions.map((s, i) => `
-    <button class="suggestion-btn" data-index="${i}" data-item-id="${itemId}" data-prompt="${escapeHtml(s.prompt_text)}">
-      ${escapeHtml(s.prompt_text)}
-    </button>
-  `).join('');
+  // Sprint G: Show hyperlink-like display_text (8-18 words, handle in quotes)
+  // No preview needed - display_text IS the full suggestion sentence
+  const suggestionsHtml = suggestions.map((s, i) => {
+    const displayText = s.display_text || s.prompt_text;  // Fallback if no display_text
+    return `
+      <button class="suggestion-btn" data-index="${i}" data-item-id="${itemId}" data-prompt="${escapeHtml(s.prompt_text)}">
+        ${escapeHtml(displayText)}
+      </button>
+    `;
+  }).join('');
 
   return `
     <div class="suggestions-container" data-for-item="${itemId}">
-      <div class="suggestions-label">Suggestions</div>
+      <div class="suggestions-label">4 ways to explore this</div>
       <div class="suggestions-grid">
         ${suggestionsHtml}
       </div>
@@ -258,6 +314,112 @@ function scrollToBottom() {
   itemsFeed.scrollTop = itemsFeed.scrollHeight;
 }
 
+// === Ontology State Management ===
+// The UI has two modes:
+// 1. NO_ACTIVE_ITEM: Composer creates new Q Items (minting)
+// 2. Q_ITEM_ACTIVE: Composer creates D Bonds targeting active Q (generating)
+
+function setActiveItem(itemId) {
+  activeItemId = itemId;
+  inputEl.placeholder = "Write a prompt for this item...";
+}
+
+function clearActiveItem() {
+  activeItemId = null;
+  currentSuggestions = null;
+  currentSuggestionItemId = null;
+  inputEl.placeholder = "Queue something...";
+}
+
+function updateActiveItemHighlight() {
+  // Remove existing highlights
+  document.querySelectorAll('.item-container.active').forEach(el => {
+    el.classList.remove('active');
+  });
+
+  // Add highlight to active item
+  if (activeItemId) {
+    const activeEl = document.querySelector(`[data-item-id="${activeItemId}"]`);
+    if (activeEl) {
+      activeEl.classList.add('active');
+    }
+  }
+}
+
+// === Composer Submit Handler (Ontology-Aware) ===
+async function handleComposerSubmit() {
+  const body = inputEl.value.trim();
+  if (!body || isProcessing) return;
+
+  if (activeItemId) {
+    // Mode: Active Q Item exists → Create + run D Bond
+    await createAndRunDBond(activeItemId, body);
+  } else {
+    // Mode: No active item → Create new Q Item
+    await createQueueItem();
+  }
+}
+
+// === Create D Bond (User-authored prompt) ===
+async function createAndRunDBond(targetItemId, promptText) {
+  isProcessing = true;
+  sendBtn.disabled = true;
+
+  // Clear input
+  inputEl.value = '';
+  inputEl.style.height = 'auto';
+
+  try {
+    const res = await fetch('/api/bonds/run-suggestion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        input_item_ids: [targetItemId],
+        prompt_text: promptText,
+        output_type: 'D',  // User-authored = Dialogue (ontology fix)
+      }),
+    });
+
+    const data = await res.json();
+
+    if (data.status === 'executed' && data.output_item) {
+      items.push(data.output_item);
+      clearActiveItem();  // Return to NO_ACTIVE_ITEM state
+      updateCredits();
+      updateUI();
+    } else {
+      throw new Error(data.error || 'Failed to run bond');
+    }
+
+  } catch (e) {
+    console.error('Create D Bond error:', e);
+    items.push({
+      id: 'error-' + Date.now(),
+      type: 'error',
+      title: 'Error',
+      body: e.message || 'Failed to create bond',
+    });
+    updateUI();
+  }
+
+  isProcessing = false;
+  sendBtn.disabled = !inputEl.value.trim();
+  inputEl.focus();
+}
+
+// === New Session Handler ===
+async function handleNewSession() {
+  if (confirm('Start fresh? This will clear all items and create a new session.')) {
+    try {
+      await fetch('/api/reset', { method: 'POST' });
+      location.reload();
+    } catch (e) {
+      console.error('Reset error:', e);
+      location.reload();
+    }
+  }
+}
+
 // Create Queue item
 async function createQueueItem() {
   const body = inputEl.value.trim();
@@ -288,6 +450,9 @@ async function createQueueItem() {
     items.push(data.item);
     updateCredits();
     updateUI();
+
+    // Set this Q as the active item (ontology fix)
+    setActiveItem(data.item.id);
 
     // Fetch suggestions for the new item
     await fetchSuggestions(data.item.id);
@@ -362,12 +527,16 @@ async function runSuggestion(btn) {
       // Add the output item
       items.push(data.output_item);
 
-      // Clear suggestions
-      currentSuggestions = null;
-      currentSuggestionItemId = null;
+      // Return to NO_ACTIVE_ITEM state (ontology fix)
+      clearActiveItem();
 
       updateCredits();
       updateUI();
+
+      // Sprint G2: Show warning toast if generation fell back to stub
+      if (data.generation_warning) {
+        showWarningToast(data.generation_warning);
+      }
     } else {
       throw new Error(data.error || 'Failed to run suggestion');
     }
@@ -383,9 +552,8 @@ async function runSuggestion(btn) {
       body: e.message || 'Failed to run suggestion',
     });
 
-    // Clear suggestions
-    currentSuggestions = null;
-    currentSuggestionItemId = null;
+    // Return to NO_ACTIVE_ITEM state (ontology fix)
+    clearActiveItem();
 
     updateUI();
   }
