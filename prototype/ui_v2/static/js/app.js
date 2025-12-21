@@ -249,13 +249,16 @@ function getTypeLabel(type) {
 }
 
 function renderSuggestions(suggestions, itemId) {
-  // Sprint G: Show hyperlink-like display_text (8-18 words, handle in quotes)
-  // No preview needed - display_text IS the full suggestion sentence
+  // Sprint G: Show full bond sentence with handle quote underneath
+  // display_text = full bond sentence (no truncation)
+  // handle_quote = verbatim substring used (shown in muted text)
   const suggestionsHtml = suggestions.map((s, i) => {
     const displayText = s.display_text || s.prompt_text;  // Fallback if no display_text
+    const handleQuote = s.handle_quote || '';  // Handle used for this suggestion
     return `
       <button class="suggestion-btn" data-index="${i}" data-item-id="${itemId}" data-prompt="${escapeHtml(s.prompt_text)}">
-        ${escapeHtml(displayText)}
+        <span class="suggestion-text">${escapeHtml(displayText)}</span>
+        ${handleQuote ? `<span class="suggestion-handle">from: "${escapeHtml(handleQuote)}"</span>` : ''}
       </button>
     `;
   }).join('');
