@@ -909,10 +909,10 @@ def render_template(
 
 # === Suggestion Generation (Item Context) ===
 
-# Import the new varied bond suggester
-from .bond_suggester import (
-    generate_suggestions as generate_varied_suggestions,
-    suggestions_to_legacy_format as suggester_to_legacy,
+# Import the new suggestion engine (OpenAI + fallback)
+from .suggestion_engine import (
+    generate_bond_suggestions,
+    suggestions_to_legacy_format as engine_to_legacy,
 )
 
 # Import context transformer for Holologue (still uses old approach for now)
@@ -927,34 +927,48 @@ def generate_suggestions_for_item(
     item_title: str,
     item_body: Optional[str] = None,
     other_item_titles: Optional[List[str]] = None,
+    return_debug: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Generate exactly 4 content-specific bond suggestions for an Item.
 
-    Uses the new varied bond suggester which:
-    - Extracts 8-20 handles from Item content (multi-word spans preferred)
-    - Selects 4 diverse handles (different kinds)
-    - Tries OpenAI generation if API key available
-    - Falls back to VARIED deterministic generation (50+ sentence patterns)
+    Uses the new suggestion engine which:
+    - Extracts up to 20 handles from Item content (span-first, structure-aware)
+    - Chooses 8 diverse handles as candidates
+    - Tries OpenAI generation if OPENAI_API_KEY available (ONE call, JSON output)
+    - Falls back to smarter deterministic method with 50+ sentence patterns
 
     Each suggestion:
     - Quotes a VERBATIM substring from the Item's actual content
-    - Uses a DIFFERENT intent type (not same 4 every time)
-    - Has VARIED surface language (not always Define/Trace/Map/Operationalize)
-    - Full text displayed in UI (no truncation/ellipsis)
+    - Uses a DIFFERENT intent type (clarify, concretize, connect, test)
+    - Has VARIED surface language (not always Define/Trace/Connect/Test)
+    - Is ONE sentence (no truncation/ellipsis)
+    - Contains a numeric constraint
 
     Returns:
     - display_text: The bond sentence (full text)
-    - prompt_text: Full prompt with context for Bond execution
-    - intent_type: clarifies | grounds_in | bridges | expands | etc.
+    - prompt_text: Full prompt for Bond execution
+    - intent_type: clarify | concretize | connect | test
     - recipe_id: for traceability
     - handle_quote: the verbatim handle used (for UI display)
     """
-    # Use the new varied suggestion generator
-    suggestions = generate_varied_suggestions(item_title, item_body, other_item_titles)
+    # Use the new suggestion engine
+    result = generate_bond_suggestions(item_title, item_body, return_debug=return_debug)
 
-    # Ensure legacy format compatibility
-    return suggester_to_legacy(suggestions)
+    # Convert to legacy format for backward compatibility
+    legacy = engine_to_legacy(result)
+
+    # Optionally attach debug info
+    if return_debug and result.get("debug"):
+        # Add debug info to the first suggestion (hacky but works for now)
+        if legacy:
+            legacy[0]["_debug"] = {
+                "candidate_handles": result["debug"]["candidate_handles"],
+                "suggestion_source": result["suggestion_source"],
+                "warning": result.get("warning"),
+            }
+
+    return legacy
 
 
 # === Proposal Generation (Holologue Context) ===

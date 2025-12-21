@@ -51,12 +51,14 @@ from .handles import (
     Handle,
     extract_handles as extract_content_handles,
     select_diverse_handles as select_content_handles,
+    choose_diverse_handles,
     choose_top_handles,
+    normalize_for_anchor,
     debug_handles,
 )
 
-from .bond_suggester import (
-    generate_suggestions as generate_bond_suggestions,
+from .suggestion_engine import (
+    generate_bond_suggestions,
     suggestions_to_legacy_format as bond_suggestions_to_legacy,
     TEST_WORDS,
 )
@@ -107,13 +109,15 @@ __all__ = [
     "transform_context",
     "transform_holologue_context",
     "suggestions_to_legacy_format",
-    # Handle Extraction (content-specific bonds)
+    # Handle Extraction (span-first, structure-aware)
     "Handle",
     "extract_content_handles",
     "select_content_handles",
+    "choose_diverse_handles",
     "choose_top_handles",
+    "normalize_for_anchor",
     "debug_handles",
-    # Bond Suggester (varied language)
+    # Suggestion Engine (OpenAI + fallback)
     "generate_bond_suggestions",
     "bond_suggestions_to_legacy",
     "TEST_WORDS",

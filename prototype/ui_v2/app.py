@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 from cli import FieldKitCLI
 from fieldkit import get_store, reset_store
 from fieldkit.spin_recipes import generate_suggestions_for_item, generate_proposals_for_holologue
+from fieldkit.generation import get_generation_mode, get_last_generation_warning
 
 # Get data directory from environment or use default
 DATA_DIR = os.environ.get("FIELDKIT_DATA_DIR")
@@ -79,6 +80,7 @@ def api_status():
     result = {
         "initialized": is_init,
         "data_dir": str(store.data_dir),
+        "generation_mode": get_generation_mode(),  # Sprint G2: GEN indicator
     }
 
     if is_init:
@@ -161,7 +163,11 @@ def api_create_item():
 
 @app.route("/api/items/<item_id>/suggestions")
 def api_item_suggestions(item_id):
-    """Get suggestions for an item."""
+    """Get suggestions for an item.
+
+    Query params:
+    - debug=true: Include debug info (candidate handles, suggestion source)
+    """
     cli = get_cli()
     if not cli.store.is_initialized():
         return jsonify({"error": "not_initialized"}), 400
@@ -170,11 +176,20 @@ def api_item_suggestions(item_id):
     if not item:
         return jsonify({"error": "item_not_found"}), 404
 
-    # Generate suggestions using Spin Recipes
+    # Check if debug mode requested
+    debug_mode = request.args.get("debug", "").lower() == "true"
+
+    # Generate suggestions using the new suggestion engine
     suggestions = generate_suggestions_for_item(
         item_title=item["title"],
         item_body=item.get("body"),
+        return_debug=debug_mode,
     )
+
+    # Extract debug info if present
+    debug_info = None
+    if debug_mode and suggestions and "_debug" in suggestions[0]:
+        debug_info = suggestions[0].pop("_debug")
 
     # Log event
     cli._load_context()
@@ -183,10 +198,15 @@ def api_item_suggestions(item_id):
         item_id=item_id, suggestions=suggestions,
     )
 
-    return jsonify({
+    response = {
         "item_id": item_id,
         "suggestions": suggestions,
-    })
+    }
+
+    if debug_info:
+        response["debug"] = debug_info
+
+    return jsonify(response)
 
 
 @app.route("/api/bonds")
@@ -297,12 +317,17 @@ def api_run_suggestion():
     if output_item_id:
         output_item = cli.store.get_item(output_item_id)
         bond = cli.store.get_bond(bond_id)
-        return jsonify({
+        result = {
             "status": "executed",
             "output_item": output_item,
             "bond": bond,
             "credits": cli._credits_balance,
-        })
+        }
+        # Sprint G2: Include generation warning if any
+        warning = get_last_generation_warning()
+        if warning:
+            result["generation_warning"] = warning
+        return jsonify(result)
     else:
         bond = cli.store.get_bond(bond_id)
         return jsonify({
@@ -321,6 +346,23 @@ def api_credits():
 
     cli._load_context()
     return jsonify({"balance": cli._credits_balance})
+
+
+@app.route("/api/reset", methods=["POST"])
+def api_reset():
+    """Reset the store for a fresh session (ontology fix for New Session)."""
+    import shutil
+    from pathlib import Path
+
+    # Reset the singleton
+    reset_store()
+
+    # Delete data files for true reset
+    data_path = DATA_DIR or Path(__file__).parent.parent / "data"
+    if Path(data_path).exists():
+        shutil.rmtree(data_path)
+
+    return jsonify({"status": "reset"})
 
 
 @app.route("/api/ledger")

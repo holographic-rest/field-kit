@@ -22,10 +22,12 @@ marked.setOptions({
 let items = [];
 let currentSuggestions = null;
 let currentSuggestionItemId = null;
+let currentDebugInfo = null;  // Debug info for suggestions (candidate handles)
 let isProcessing = false;
 let userScrolledUp = false;
 let activeItemId = null;  // Track which Q Item is receiving prompts (ontology fix)
 let generationMode = 'stub';  // Sprint G2: Track generation mode for UI indicator
+let debugMode = false;  // Debug toggle state - shows candidate handles
 
 // Initialize
 init();
@@ -81,6 +83,37 @@ function updateGenerationModeIndicator() {
     indicator.className = generationMode.startsWith('openai:')
       ? 'gen-mode-indicator gen-openai'
       : 'gen-mode-indicator gen-stub';
+  }
+}
+
+// Debug toggle setup
+function setupDebugToggle() {
+  const headerRight = document.querySelector('.header-right');
+  if (!headerRight) return;
+
+  // Create debug toggle button
+  const toggle = document.createElement('button');
+  toggle.id = 'debugToggle';
+  toggle.className = 'debug-toggle';
+  toggle.textContent = 'Debug';
+  toggle.title = 'Show candidate handles for suggestions';
+
+  toggle.addEventListener('click', () => {
+    debugMode = !debugMode;
+    toggle.classList.toggle('active', debugMode);
+
+    // Re-render to show/hide debug info
+    if (currentSuggestions && currentSuggestionItemId) {
+      renderItems();
+    }
+  });
+
+  // Insert before ledger button
+  const ledgerBtn = document.getElementById('ledgerBtn');
+  if (ledgerBtn) {
+    headerRight.insertBefore(toggle, ledgerBtn);
+  } else {
+    headerRight.appendChild(toggle);
   }
 }
 
@@ -165,6 +198,9 @@ function setupEventListeners() {
   ledgerModal.addEventListener('click', (e) => {
     if (e.target === ledgerModal) closeLedger();
   });
+
+  // Debug toggle
+  setupDebugToggle();
 
   // Prompt chips
   promptChips.querySelectorAll('.chip').forEach(chip => {
@@ -263,9 +299,28 @@ function renderSuggestions(suggestions, itemId) {
     `;
   }).join('');
 
+  // Debug panel showing candidate handles
+  let debugHtml = '';
+  if (debugMode && currentDebugInfo) {
+    const handles = currentDebugInfo.candidate_handles || [];
+    const source = currentDebugInfo.suggestion_source || 'unknown';
+    debugHtml = `
+      <div class="debug-panel">
+        <div class="debug-header">
+          <span class="debug-title">Candidate Handles (${handles.length})</span>
+          <span class="debug-source">source: ${source}</span>
+        </div>
+        <div class="debug-handles">
+          ${handles.map((h, i) => `<span class="debug-handle">${i + 1}. "${escapeHtml(h)}"</span>`).join('')}
+        </div>
+      </div>
+    `;
+  }
+
   return `
     <div class="suggestions-container" data-for-item="${itemId}">
       <div class="suggestions-label">4 ways to explore this</div>
+      ${debugHtml}
       <div class="suggestions-grid">
         ${suggestionsHtml}
       </div>
@@ -331,6 +386,7 @@ function clearActiveItem() {
   activeItemId = null;
   currentSuggestions = null;
   currentSuggestionItemId = null;
+  currentDebugInfo = null;
   inputEl.placeholder = "Queue something...";
 }
 
@@ -479,12 +535,20 @@ async function createQueueItem() {
 
 async function fetchSuggestions(itemId) {
   try {
-    const res = await fetch(`/api/items/${itemId}/suggestions`);
+    // Always fetch with debug=true so we have data if user toggles debug on
+    const res = await fetch(`/api/items/${itemId}/suggestions?debug=true`);
     const data = await res.json();
 
     if (data.suggestions && data.suggestions.length > 0) {
       currentSuggestions = data.suggestions;
       currentSuggestionItemId = itemId;
+
+      // Store debug info for display when debug mode is enabled
+      currentDebugInfo = data.debug || null;
+      if (currentDebugInfo && data.suggestion_source) {
+        currentDebugInfo.suggestion_source = data.suggestion_source;
+      }
+
       renderItems();
     }
   } catch (e) {
