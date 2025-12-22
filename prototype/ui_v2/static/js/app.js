@@ -1,5 +1,6 @@
-// Field-Kit v0.1 UI - Queue Lattice Sprint
-// Version: 2025-01-15-QL2
+// Field-Kit v0.1 UI - Queue Lattice (Hololoop Only)
+// Version: 2025-01-15-QL3
+// IMPORTANT: This UI creates Queue items ONLY. No D/M/H output generation.
 
 // DOM elements
 const itemsFeed = document.getElementById('itemsFeed');
@@ -23,24 +24,19 @@ marked.setOptions({
 
 // State
 let items = [];
-let bonds = [];  // Track hololoop bonds
-let currentSuggestions = null;
-let currentSuggestionItemId = null;
-let currentDebugInfo = null;
+let bonds = [];
 let isProcessing = false;
 let userScrolledUp = false;
 let generationMode = 'stub';
-let debugMode = false;
 
-// Queue Lattice: Active Item state
-let activeItemId = null;  // The currently active (clicked/focused) Q item
+// Queue Lattice state
+let hololoopOptions = null;      // 4 hololoop options when available
+let hololoopItemA = null;        // First Q item in pair
+let hololoopItemB = null;        // Second Q item in pair
+let draftHololoop = null;        // Created hololoop bond (after selection)
 
-// Queue Lattice: Draft Hololoop state
-let draftHololoop = null;  // Current draft hololoop bond
-let draftHololoopOptions = null;  // Available options for regeneration
-
-// UI Version (for cache busting)
-const UI_VERSION = '2025-01-15-QL2';
+// UI Version
+const UI_VERSION = '2025-01-15-QL3';
 
 // Initialize
 init();
@@ -56,20 +52,18 @@ async function init() {
 }
 
 function setupVersionStamp() {
-  // Add version stamp to header
   const headerRight = document.querySelector('.header-right');
   if (headerRight) {
     const stamp = document.createElement('span');
     stamp.className = 'version-stamp';
     stamp.textContent = `v${UI_VERSION}`;
-    stamp.title = 'UI Version';
+    stamp.title = 'Queue Lattice UI';
     headerRight.insertBefore(stamp, headerRight.firstChild);
   }
 }
 
 async function checkAndInit() {
   try {
-    // Cache-busting timestamp
     const ts = Date.now();
     const res = await fetch(`/api/status?_t=${ts}`);
     const data = await res.json();
@@ -108,30 +102,6 @@ function updateGenerationModeIndicator() {
     indicator.className = generationMode.startsWith('openai:')
       ? 'gen-mode-indicator gen-openai'
       : 'gen-mode-indicator gen-stub';
-  }
-}
-
-function setupDebugToggle() {
-  const headerRight = document.querySelector('.header-right');
-  if (!headerRight) return;
-
-  const toggle = document.createElement('button');
-  toggle.id = 'debugToggle';
-  toggle.className = 'debug-toggle';
-  toggle.textContent = 'Debug';
-  toggle.title = 'Show candidate handles';
-
-  toggle.addEventListener('click', () => {
-    debugMode = !debugMode;
-    toggle.classList.toggle('active', debugMode);
-    renderItems();
-  });
-
-  const ledgerBtn = document.getElementById('ledgerBtn');
-  if (ledgerBtn) {
-    headerRight.insertBefore(toggle, ledgerBtn);
-  } else {
-    headerRight.appendChild(toggle);
   }
 }
 
@@ -180,10 +150,10 @@ async function loadBonds() {
     const data = await res.json();
     bonds = data.bonds || [];
 
-    // Find any draft hololoops
-    const drafts = bonds.filter(b => b.bond_kind === 'hololoop' && b.status === 'draft');
-    if (drafts.length > 0) {
-      draftHololoop = drafts[drafts.length - 1];  // Most recent
+    // Find any existing hololoop
+    const hololoops = bonds.filter(b => b.bond_kind === 'hololoop');
+    if (hololoops.length > 0) {
+      draftHololoop = hololoops[hololoops.length - 1];
     }
   } catch (e) {
     console.error('Load bonds error:', e);
@@ -244,9 +214,6 @@ function setupEventListeners() {
     if (e.target === ledgerModal) closeLedger();
   });
 
-  // Debug toggle
-  setupDebugToggle();
-
   // Prompt chips
   promptChips.querySelectorAll('.chip').forEach(chip => {
     chip.addEventListener('click', () => {
@@ -286,18 +253,22 @@ function renderItems() {
     html += renderItem(item);
   }
 
-  // Render draft hololoop section if exists
-  if (draftHololoop && qItems.length >= 2) {
-    html += renderDraftHololoopSection();
-  } else if (qItems.length === 1) {
+  // Queue Lattice: Show appropriate state based on Q item count
+  if (qItems.length === 1 && !draftHololoop) {
+    // After Q1: Show gating hint
     html += renderGatingHint();
+  } else if (qItems.length >= 2 && hololoopOptions && !draftHololoop) {
+    // After Q2: Show 4 hololoop options for selection
+    html += renderHololoopOptions();
+  } else if (draftHololoop) {
+    // After selection: Show draft hololoop
+    html += renderDraftHololoopSection();
   }
 
   itemsFeed.innerHTML = html;
-  addItemClickListeners();
-  addHandleListeners();
+  addCopyButtonListeners();
+  addHololoopOptionListeners();
   addDraftHololoopListeners();
-  updateActiveItemHighlight();
 
   if (!userScrolledUp) {
     scrollToBottom();
@@ -307,8 +278,6 @@ function renderItems() {
 function renderItem(item) {
   const typeClass = `item-${item.type.toLowerCase()}`;
   const typeLabel = getTypeLabel(item.type);
-  const isActive = item.id === activeItemId;
-  const activeClass = isActive ? 'active' : '';
 
   let content;
   if (item.type === 'Q') {
@@ -317,13 +286,13 @@ function renderItem(item) {
     content = renderMarkdown(item.body || item.title);
   }
 
-  // Queue Lattice: Render handles for Q items
+  // Show handles if available
   let handlesHtml = '';
   if (item.type === 'Q' && item.handles && item.handles.length > 0) {
-    handlesHtml = renderItemHandles(item.id, item.handles);
+    handlesHtml = renderItemHandles(item.handles);
   }
 
-  // Check if this item is part of the draft hololoop
+  // Show hololink if this item is part of draft hololoop
   let hololinkHtml = '';
   if (draftHololoop && item.type === 'Q') {
     const inputIds = draftHololoop.input_item_ids || [];
@@ -333,10 +302,9 @@ function renderItem(item) {
   }
 
   return `
-    <div class="item-container ${typeClass} ${activeClass}" data-item-id="${item.id}">
+    <div class="item-container ${typeClass}" data-item-id="${item.id}">
       <div class="item-header">
         <span class="item-type-badge">${typeLabel}</span>
-        ${item.type === 'Q' ? `<button class="item-focus-btn" data-item-id="${item.id}" title="Set as active">⊙</button>` : ''}
       </div>
       <div class="item-content">${content}</div>
       ${handlesHtml}
@@ -345,15 +313,11 @@ function renderItem(item) {
   `;
 }
 
-function renderItemHandles(itemId, handles) {
-  const handleChips = handles.map((h, i) => {
+function renderItemHandles(handles) {
+  const handleChips = handles.slice(0, 5).map(h => {
+    const text = h.quote.length > 40 ? h.quote.substring(0, 40) + '...' : h.quote;
     const starredClass = h.starred ? 'starred' : '';
-    return `
-      <span class="handle-chip ${starredClass}" data-item-id="${itemId}" data-index="${i}">
-        <span class="handle-text">"${escapeHtml(h.quote.substring(0, 40))}${h.quote.length > 40 ? '...' : ''}"</span>
-        <button class="handle-star" title="${h.starred ? 'Unstar' : 'Star'}">★</button>
-      </span>
-    `;
+    return `<span class="handle-chip ${starredClass}">"${escapeHtml(text)}"</span>`;
   }).join('');
 
   return `
@@ -368,13 +332,57 @@ function renderItemHololink(itemId, bond) {
   const inputIds = bond.input_item_ids || [];
   const isSource = inputIds[0] === itemId;
   const linkText = isSource ? bond.link_text_forward : bond.link_text_return;
-  const targetId = isSource ? inputIds[1] : inputIds[0];
   const direction = isSource ? '→' : '←';
 
   return `
-    <div class="item-hololink" data-bond-id="${bond.id}">
+    <div class="item-hololink">
       <span class="hololink-arrow">${direction}</span>
       <span class="hololink-text">${escapeHtml(linkText || 'Link pending...')}</span>
+    </div>
+  `;
+}
+
+function renderGatingHint() {
+  return `
+    <div class="gating-hint">
+      <span class="gating-icon">🔗</span>
+      <span class="gating-text">Create one more Item to generate hololoop options.</span>
+    </div>
+  `;
+}
+
+function renderHololoopOptions() {
+  if (!hololoopOptions || hololoopOptions.length === 0) return '';
+
+  const itemA = items.find(i => i.id === hololoopItemA);
+  const itemB = items.find(i => i.id === hololoopItemB);
+  const nameA = itemA?.title?.substring(0, 25) || 'Item A';
+  const nameB = itemB?.title?.substring(0, 25) || 'Item B';
+
+  const optionsHtml = hololoopOptions.map((opt, idx) => `
+    <button class="hololoop-option-btn" data-option-index="${idx}">
+      <div class="hololoop-option-content">
+        <div class="hololoop-direction">
+          <span class="direction-label">${escapeHtml(nameA)} →</span>
+          <span class="direction-text">${escapeHtml(opt.link_text_forward)}</span>
+        </div>
+        <div class="hololoop-direction">
+          <span class="direction-label">${escapeHtml(nameB)} →</span>
+          <span class="direction-text">${escapeHtml(opt.link_text_return)}</span>
+        </div>
+      </div>
+    </button>
+  `).join('');
+
+  return `
+    <div class="hololoop-options-container">
+      <div class="hololoop-options-header">
+        <span class="hololoop-options-title">Choose a hololoop connection</span>
+        <span class="hololoop-options-subtitle">${escapeHtml(nameA)} ↔ ${escapeHtml(nameB)}</span>
+      </div>
+      <div class="hololoop-options-grid">
+        ${optionsHtml}
+      </div>
     </div>
   `;
 }
@@ -394,8 +402,8 @@ function renderDraftHololoopSection() {
   return `
     <div class="draft-hololoop-section" data-bond-id="${draftHololoop.id}">
       <div class="draft-header">
-        <span class="draft-label">Draft Hololoop</span>
-        <span class="draft-status">pending acceptance</span>
+        <span class="draft-label">Hololoop Created</span>
+        <span class="draft-status">${draftHololoop.status}</span>
       </div>
       <div class="draft-items">
         <span class="draft-item">${escapeHtml(sourceName)}</span>
@@ -412,21 +420,6 @@ function renderDraftHololoopSection() {
           <span class="link-text">${escapeHtml(draftHololoop.link_text_return || '')}</span>
         </div>
       </div>
-      <div class="draft-actions">
-        <button class="draft-btn accept" data-action="accept">Accept</button>
-        <button class="draft-btn edit" data-action="edit">Edit</button>
-        <button class="draft-btn regenerate" data-action="regenerate">Regenerate</button>
-        <button class="draft-btn change-target" data-action="change-target">Change Target</button>
-      </div>
-    </div>
-  `;
-}
-
-function renderGatingHint() {
-  return `
-    <div class="gating-hint">
-      <span class="gating-icon">🔗</span>
-      <span class="gating-text">Create one more Item to auto-generate a draft hololoop.</span>
     </div>
   `;
 }
@@ -453,24 +446,8 @@ function renderMarkdown(text) {
   return html;
 }
 
-// Item interaction listeners
-function addItemClickListeners() {
-  // Focus button clicks
-  document.querySelectorAll('.item-focus-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      setActiveItem(btn.dataset.itemId);
-    });
-  });
-
-  // Item container clicks (for Q items)
-  document.querySelectorAll('.item-container.item-q').forEach(container => {
-    container.addEventListener('click', () => {
-      setActiveItem(container.dataset.itemId);
-    });
-  });
-
-  // Copy buttons
+// Listeners
+function addCopyButtonListeners() {
   document.querySelectorAll('.copy-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -492,250 +469,62 @@ function addItemClickListeners() {
   });
 }
 
-function addHandleListeners() {
-  document.querySelectorAll('.handle-star').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const chip = btn.closest('.handle-chip');
-      const itemId = chip.dataset.itemId;
-      const index = parseInt(chip.dataset.index);
-      await toggleHandleStar(itemId, index);
-    });
-  });
-}
-
-async function toggleHandleStar(itemId, handleIndex) {
-  const item = items.find(i => i.id === itemId);
-  if (!item || !item.handles) return;
-
-  const handles = [...item.handles];
-  handles[handleIndex].starred = !handles[handleIndex].starred;
-
-  try {
-    const res = await fetch(`/api/items/${itemId}/handles`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ handles }),
-    });
-
-    if (res.ok) {
-      item.handles = handles;
-      renderItems();
-    }
-  } catch (e) {
-    console.error('Toggle star error:', e);
-  }
-}
-
-function addDraftHololoopListeners() {
-  document.querySelectorAll('.draft-actions .draft-btn').forEach(btn => {
+function addHololoopOptionListeners() {
+  document.querySelectorAll('.hololoop-option-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
-      const action = btn.dataset.action;
-      const section = btn.closest('.draft-hololoop-section');
-      const bondId = section?.dataset.bondId;
-
-      if (!bondId) return;
-
-      switch (action) {
-        case 'accept':
-          await acceptDraftHololoop(bondId);
-          break;
-        case 'edit':
-          showEditHololoopModal(bondId);
-          break;
-        case 'regenerate':
-          await regenerateDraftHololoop(bondId);
-          break;
-        case 'change-target':
-          showChangeTargetModal(bondId);
-          break;
-      }
+      const optionIndex = parseInt(btn.dataset.optionIndex);
+      await selectHololoopOption(optionIndex);
     });
   });
 }
 
-async function acceptDraftHololoop(bondId) {
-  try {
-    const res = await fetch(`/api/draft-hololoop/${bondId}/accept`, {
-      method: 'POST',
-    });
+async function selectHololoopOption(optionIndex) {
+  if (!hololoopOptions || !hololoopItemA || !hololoopItemB) return;
 
-    if (res.ok) {
-      draftHololoop = null;
-      showSuccessToast('Hololoop accepted!');
-      await loadBonds();
-      renderItems();
-    }
-  } catch (e) {
-    console.error('Accept draft error:', e);
-    showWarningToast('Failed to accept hololoop');
-  }
-}
-
-async function regenerateDraftHololoop(bondId) {
-  try {
-    const res = await fetch(`/api/draft-hololoop/${bondId}/regenerate`, {
-      method: 'POST',
-    });
-
-    const data = await res.json();
-    if (data.options && data.options.length > 0) {
-      // Update draft with first option
-      const selected = data.options[0];
-      await fetch(`/api/draft-hololoop/${bondId}/update`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          link_text_forward: selected.link_text_forward,
-          link_text_return: selected.link_text_return,
-        }),
-      });
-
-      draftHololoopOptions = data.options;
-      await loadBonds();
-      renderItems();
-      showSuccessToast('Regenerated hololink options');
-    }
-  } catch (e) {
-    console.error('Regenerate error:', e);
-    showWarningToast('Failed to regenerate');
-  }
-}
-
-function showEditHololoopModal(bondId) {
-  // Simple inline edit for now - could be modal
-  const bond = bonds.find(b => b.id === bondId);
-  if (!bond) return;
-
-  const newForward = prompt('Edit A→B link text:', bond.link_text_forward);
-  if (newForward === null) return;
-
-  const newReturn = prompt('Edit B→A link text:', bond.link_text_return);
-  if (newReturn === null) return;
-
-  updateDraftHololoop(bondId, { link_text_forward: newForward, link_text_return: newReturn });
-}
-
-async function showChangeTargetModal(bondId) {
-  const bond = bonds.find(b => b.id === bondId);
-  if (!bond) return;
-
-  const sourceId = bond.input_item_ids[0];
-  const qItems = items.filter(i => i.type === 'Q' && i.id !== sourceId);
-
-  if (qItems.length === 0) {
-    showWarningToast('No other items available as targets');
-    return;
-  }
-
-  // Simple prompt for now
-  const options = qItems.map((item, i) => `${i + 1}. ${item.title?.substring(0, 40)}`).join('\n');
-  const choice = prompt(`Select new target:\n${options}\n\nEnter number:`);
-
-  if (choice === null) return;
-
-  const idx = parseInt(choice) - 1;
-  if (idx >= 0 && idx < qItems.length) {
-    await updateDraftHololoop(bondId, { target_item_id: qItems[idx].id });
-    // Need to regenerate after changing target
-    await regenerateDraftHololoop(bondId);
-  }
-}
-
-async function updateDraftHololoop(bondId, updates) {
-  try {
-    const res = await fetch(`/api/draft-hololoop/${bondId}/update`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates),
-    });
-
-    if (res.ok) {
-      await loadBonds();
-      renderItems();
-    }
-  } catch (e) {
-    console.error('Update draft error:', e);
-  }
-}
-
-// Active Item management
-function setActiveItem(itemId) {
-  activeItemId = itemId;
-  inputEl.placeholder = "Write a prompt for this item...";
-  updateActiveItemHighlight();
-}
-
-function clearActiveItem() {
-  activeItemId = null;
-  currentSuggestions = null;
-  currentSuggestionItemId = null;
-  currentDebugInfo = null;
-  inputEl.placeholder = "Queue something...";
-  updateActiveItemHighlight();
-}
-
-function updateActiveItemHighlight() {
-  document.querySelectorAll('.item-container.active').forEach(el => {
-    el.classList.remove('active');
-  });
-
-  if (activeItemId) {
-    const activeEl = document.querySelector(`[data-item-id="${activeItemId}"]`);
-    if (activeEl) {
-      activeEl.classList.add('active');
-    }
-  }
-}
-
-// Composer submit handler
-async function handleComposerSubmit() {
-  const body = inputEl.value.trim();
-  if (!body || isProcessing) return;
-
-  if (activeItemId) {
-    await createAndRunDBond(activeItemId, body);
-  } else {
-    await createQueueItem();
-  }
-}
-
-async function createAndRunDBond(targetItemId, promptText) {
   isProcessing = true;
-  sendBtn.disabled = true;
-  inputEl.value = '';
-  inputEl.style.height = 'auto';
 
   try {
-    const res = await fetch('/api/bonds/run-suggestion', {
+    // Create hololoop bond with selected option
+    const res = await fetch('/api/hololoop/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        input_item_ids: [targetItemId],
-        prompt_text: promptText,
-        output_type: 'D',
+        item_a_id: hololoopItemA,
+        item_b_id: hololoopItemB,
+        option_index: optionIndex + 1,  // API uses 1-indexed
       }),
     });
 
     const data = await res.json();
 
-    if (data.status === 'executed' && data.output_item) {
-      items.push(data.output_item);
-      clearActiveItem();
-      updateCredits();
-      updateUI();
+    if (data.status === 'created' && data.bond) {
+      draftHololoop = data.bond;
+      hololoopOptions = null;  // Clear options after selection
+      showSuccessToast('Hololoop created!');
+      await loadBonds();
+      renderItems();
     } else {
-      throw new Error(data.error || 'Failed to run bond');
+      throw new Error(data.error || 'Failed to create hololoop');
     }
-
   } catch (e) {
-    console.error('Create D Bond error:', e);
-    showWarningToast('Failed to create bond: ' + e.message);
+    console.error('Select hololoop error:', e);
+    showWarningToast('Failed to create hololoop: ' + e.message);
   }
 
   isProcessing = false;
-  sendBtn.disabled = !inputEl.value.trim();
-  inputEl.focus();
+}
+
+function addDraftHololoopListeners() {
+  // No actions needed for now - draft is created by selection
+}
+
+// Composer - ONLY creates Queue items (no D/M generation)
+async function handleComposerSubmit() {
+  const body = inputEl.value.trim();
+  if (!body || isProcessing) return;
+
+  // Queue Lattice: ALWAYS create Queue items only
+  await createQueueItem();
 }
 
 async function handleNewSession() {
@@ -750,7 +539,7 @@ async function handleNewSession() {
   }
 }
 
-// Create Queue item
+// Create Queue item (the ONLY item creation path)
 async function createQueueItem() {
   const body = inputEl.value.trim();
   if (!body || isProcessing) return;
@@ -776,16 +565,14 @@ async function createQueueItem() {
     items.push(data.item);
     updateCredits();
 
-    // Queue Lattice: Auto-create draft hololoop on 2nd+ Q item
+    // Queue Lattice: After Q2+, fetch hololoop options (NOT auto-create)
     const qItems = items.filter(i => i.type === 'Q');
 
     if (qItems.length >= 2 && !draftHololoop) {
-      // Auto-create draft hololoop
-      await createDraftHololoop(data.item.id, activeItemId);
+      // Fetch 4 hololoop options for user to select
+      await fetchHololoopOptions(qItems[qItems.length - 2].id, qItems[qItems.length - 1].id);
     }
 
-    // Set new item as active
-    setActiveItem(data.item.id);
     updateUI();
 
   } catch (e) {
@@ -798,27 +585,18 @@ async function createQueueItem() {
   inputEl.focus();
 }
 
-async function createDraftHololoop(sourceItemId, targetItemId) {
+async function fetchHololoopOptions(itemAId, itemBId) {
   try {
-    const res = await fetch('/api/draft-hololoop', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source_item_id: sourceItemId,
-        target_item_id: targetItemId || null,  // Will auto-find if null
-      }),
-    });
-
+    const res = await fetch(`/api/hololoop/options?item_a=${itemAId}&item_b=${itemBId}`);
     const data = await res.json();
 
-    if (data.status === 'draft_created') {
-      draftHololoop = data.bond;
-      draftHololoopOptions = data.all_options;
-      showSuccessToast('Draft hololoop created!');
-      await loadBonds();
+    if (data.options && data.options.length > 0) {
+      hololoopOptions = data.options;
+      hololoopItemA = itemAId;
+      hololoopItemB = itemBId;
     }
   } catch (e) {
-    console.error('Create draft hololoop error:', e);
+    console.error('Fetch hololoop options error:', e);
   }
 }
 
@@ -869,7 +647,7 @@ async function openLedger() {
 
     html += '</div>';
 
-    // Bonds (including hololoops)
+    // Bonds
     html += `
       <div class="ledger-section">
         <h3>Bonds (${data.bonds?.length || 0})</h3>
@@ -881,7 +659,7 @@ async function openLedger() {
         html += `
           <div class="ledger-item">
             <span class="ledger-item-type">${bond.status}${kindBadge}</span>
-            ${escapeHtml(bond.prompt_text?.slice(0, 60) || bond.link_text_forward?.slice(0, 60) || 'No text')}...
+            ${escapeHtml(bond.link_text_forward?.slice(0, 60) || bond.prompt_text?.slice(0, 60) || 'No text')}...
           </div>
         `;
       }
@@ -890,6 +668,26 @@ async function openLedger() {
     }
 
     html += '</div>';
+
+    // Events summary
+    if (data.events && data.events.length > 0) {
+      html += `
+        <div class="ledger-section">
+          <h3>Recent Events (${data.events.length})</h3>
+      `;
+
+      const recentEvents = data.events.slice(-10);
+      for (const event of recentEvents) {
+        html += `
+          <div class="ledger-item ledger-event">
+            <span class="ledger-item-type">${event.name}</span>
+            seq=${event.seq}
+          </div>
+        `;
+      }
+
+      html += '</div>';
+    }
 
     ledgerContent.innerHTML = html;
 
