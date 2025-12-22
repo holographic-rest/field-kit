@@ -1,16 +1,24 @@
 """
-Field-Kit v0.1 Handle Extraction (Span-First, Structure-Aware)
+Field-Kit v0.1 Handle Extraction (Queue Lattice PASS 2)
 
-Extracts span-level handles from Item content for bond generation.
+Extracts short, diverse handles from Item content for hololoop generation.
 
-A handle is a verbatim substring from the Item that can anchor a bond.
+A handle is a verbatim substring (plain text, NO quotes) that anchors a hololink.
+
+PASS 2 Requirements:
+- Handles must be SHORT (≤40 chars preferred, max 60)
+- Handles appear as PLAIN TEXT in hololinks (never quoted)
+- Strip PAGE X boilerplate
+- Deduplicate
+- Return 3-7 handles per item
+
 Priority order:
-1. Bullet headers / colon clauses (structured content)
-2. Multi-word spans (>= 3 words) - avoid single nouns
-3. Named entities and capitalized phrases
-4. Sentence fragments (only if better handles unavailable)
+1. Title line (normalized)
+2. Named entities / key noun phrases (The Author, Scheherazade, Giallo)
+3. Bullet headers / emphasized phrases
+4. First sentence fragments as fallback
 
-Returns up to 20 handles with choose_diverse_handles() for variety.
+Returns up to 15 handles with choose_diverse_handles() for variety.
 """
 
 from dataclasses import dataclass
@@ -24,11 +32,12 @@ import hashlib
 class Handle:
     """A handle extracted from Item content."""
     handle_id: str     # Unique ID for this handle
-    quote: str         # Exact verbatim substring from item
+    quote: str         # Exact verbatim substring from item (NO quotes added)
     kind: str          # bullet | colon | entity | phrase | sentence | heading
     score: float       # Ranking score (0-1)
     source: str        # body | title
     line_num: int      # Line number in source (0 for title)
+    extraction_tag: str = ""  # Debug: how this handle was extracted
 
 
 # === Domain entities to recognize ===
@@ -64,10 +73,23 @@ def _score_by_word_count(quote: str, base_score: float) -> float:
         return max(base_score - 0.15, 0.1)  # Penalty for single words
 
 
+def strip_all_quotes(s: str) -> str:
+    """
+    Remove ALL quotation marks from string.
+
+    PASS 2 CRITICAL: Handles must NEVER contain quotation marks.
+    They appear as plain text in hololinks.
+    """
+    if not s:
+        return ""
+    # Remove all quote characters: ", ', ", ", ', ', «, »
+    return re.sub(r'["\'\u201c\u201d\u2018\u2019\u00ab\u00bb]', '', s)
+
+
 def normalize_for_anchor(s: str) -> str:
     """
     Normalize a string for use as anchor phrase.
-    Strips "PAGE X – ..." prefixes, "Title: " prefixes, and leading/trailing punctuation.
+    Strips "PAGE X – ..." prefixes, "Title: " prefixes, quotes, and leading/trailing punctuation.
     """
     if not s:
         return ""
@@ -77,6 +99,8 @@ def normalize_for_anchor(s: str) -> str:
     result = re.sub(r'^PAGE\s+\d+\s+', '', result, flags=re.IGNORECASE)
     # Strip "Title: " prefix
     result = re.sub(r'^Title:\s*', '', result, flags=re.IGNORECASE)
+    # CRITICAL: Strip all quotation marks
+    result = strip_all_quotes(result)
     # Strip leading/trailing punctuation (but keep internal)
     result = re.sub(r'^[^\w]+', '', result)
     result = re.sub(r'[^\w]+$', '', result)
@@ -87,30 +111,38 @@ def normalize_for_anchor(s: str) -> str:
 
 def extract_handles(text: str, title: Optional[str] = None) -> List[Dict[str, Any]]:
     """
-    Extract up to 20 candidate handles from Item content.
+    Extract up to 15 candidate handles from Item content.
+
+    PASS 2 Requirements:
+    - Handles must be SHORT (≤40 chars preferred, max 60)
+    - Handles contain NO quotation marks (stripped)
+    - Return 3-7 diverse handles per item
 
     Args:
         text: The item body text
         title: Optional item title
 
     Returns:
-        List of handle dicts with: handle_id, quote, kind, score, source, line_num
+        List of handle dicts with: handle_id, quote, kind, score, source, line_num, extraction_tag
 
-    Priority (span-first, structure-aware):
-    1. Bullet labels and colon clauses (highest value for structure)
-    2. Multi-word spans from title/headings (>= 3 words)
-    3. Named entities and capitalized phrases
-    4. Quoted/bold text
-    5. Sentence fragments (fallback for prose-only content)
+    Priority:
+    1. Title line (normalized, short)
+    2. Named entities / capitalized noun phrases (The Author, Scheherazade)
+    3. Bullet labels and colon clauses
+    4. Bold/emphasized phrases
+    5. First sentence fragments (fallback)
     """
     handles = []
     seen_quotes = set()
 
-    def add_handle(quote: str, kind: str, score: float, source: str, line_num: int = 0) -> bool:
-        """Add handle if valid and not duplicate."""
+    def add_handle(quote: str, kind: str, score: float, source: str, line_num: int = 0, tag: str = "") -> bool:
+        """Add handle if valid and not duplicate. CRITICAL: Strips all quotes."""
         quote = quote.strip()
         if not quote or len(quote) < 4:
             return False
+
+        # CRITICAL: Strip ALL quotation marks
+        quote = strip_all_quotes(quote)
 
         # Skip PAGE patterns
         if re.match(r'^page\s+\d+', quote.lower()):
@@ -129,20 +161,45 @@ def extract_handles(text: str, title: Optional[str] = None) -> List[Dict[str, An
         if _word_count(quote) == 1 and kind not in ('entity',) and len(quote) < 6:
             return False
 
-        # Truncate very long quotes but keep them
-        original_quote = quote
-        if len(quote) > 100:
-            # Find a natural break point
-            for delim in [',', ';', '—', '-', ' and ', '.']:
-                idx = quote[:100].rfind(delim)
-                if idx > 40:
+        # PASS 2: Prefer SHORT handles (≤40 chars)
+        # Truncate long handles to find natural break points
+        if len(quote) > 40:
+            # Find a natural break point before 40 chars
+            for delim in [',', ';', '—', ' - ', ' and ']:
+                idx = quote[:40].rfind(delim)
+                if idx > 15:
                     quote = quote[:idx].strip()
                     break
             else:
-                quote = quote[:97].strip() + "..."
+                # No good break point - try word boundary
+                if len(quote) > 60:
+                    words = quote.split()
+                    truncated = []
+                    length = 0
+                    for w in words:
+                        if length + len(w) + 1 > 40:
+                            break
+                        truncated.append(w)
+                        length += len(w) + 1
+                    if truncated:
+                        quote = ' '.join(truncated)
+
+        # Final length check - reject if still too long
+        if len(quote) > 60:
+            return False
+
+        # Strip trailing punctuation
+        quote = re.sub(r'[,;:.\-–—]+$', '', quote).strip()
+
+        if len(quote) < 4:
+            return False
 
         # Apply word count boost to score (prefer multi-word spans)
         adjusted_score = _score_by_word_count(quote, score)
+
+        # Bonus for ideal length (15-35 chars)
+        if 15 <= len(quote) <= 35:
+            adjusted_score = min(adjusted_score + 0.05, 1.0)
 
         seen_quotes.add(quote_normalized)
         handles.append({
@@ -152,6 +209,7 @@ def extract_handles(text: str, title: Optional[str] = None) -> List[Dict[str, An
             "score": adjusted_score,
             "source": source,
             "line_num": line_num,
+            "extraction_tag": tag,
         })
         return True
 
@@ -160,120 +218,107 @@ def extract_handles(text: str, title: Optional[str] = None) -> List[Dict[str, An
     if text:
         lines = [(i + 1, line, "body") for i, line in enumerate(text.split('\n'))]
 
-    # === 1. Extract colon clauses (What/How/Why patterns) - HIGHEST PRIORITY ===
+    full_text = (text or "") + "\n" + (title or "")
+
+    # === 1. Extract from title FIRST (highest priority) ===
+    if title:
+        normalized_title = normalize_for_anchor(title)
+        if normalized_title and len(normalized_title) >= 4:
+            add_handle(normalized_title, "heading", 0.98, "title", 0, "title_normalized")
+
+    # === 2. Named entities - CRITICAL for literary/creative content ===
+    # Look for capitalized phrases: The Author, Scheherazade, Giallo, Magical Dominion
+    # Pattern: "The X" or multi-word capitalized phrases
+    for match in re.finditer(r'\b(The\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b', full_text):
+        phrase = match.group(1).strip()
+        if 6 <= len(phrase) <= 40:
+            add_handle(phrase, "entity", 0.95, "body", 0, "the_phrase")
+
+    # Single capitalized terms that look like names/concepts (not common words)
+    common_words = {'This', 'That', 'These', 'Those', 'What', 'When', 'Where', 'Which', 'While', 'Although', 'However', 'Therefore', 'Perhaps', 'Maybe', 'Indeed', 'Actually', 'Simply', 'Really', 'Just'}
+    for match in re.finditer(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b', full_text):
+        phrase = match.group(1).strip()
+        if phrase not in common_words and 4 <= len(phrase) <= 35:
+            # Extra validation: should not be at start of sentence (after period)
+            start = match.start()
+            if start > 0 and full_text[start-1] not in '.!?\n':
+                add_handle(phrase, "entity", 0.90, "body", 0, "capitalized_phrase")
+
+    # === 3. Extract colon clauses (What/How/Why patterns) ===
     for line_num, line, source in lines:
         line_stripped = line.strip()
 
         # "What X is:", "How X works:", "Why X matters:", etc.
         colon_match = re.match(
-            r'^((?:What|How|Why|When|Where|Which)\s+[^:]{3,70}):\s*(.*)$',
+            r'^((?:What|How|Why|When|Where|Which)\s+[^:]{3,40}):\s*(.*)$',
             line_stripped,
             re.IGNORECASE
         )
         if colon_match:
             clause = colon_match.group(1).strip()
-            explanation = colon_match.group(2).strip()
+            add_handle(clause, "colon", 0.88, source, line_num, "wh_clause")
 
-            # The full clause is a high-quality handle
-            add_handle(clause, "colon", 0.98, source, line_num)
-
-            # The explanation is also valuable if it's substantial
-            if explanation and len(explanation) >= 15 and len(explanation) <= 120:
-                add_handle(explanation, "colon", 0.92, source, line_num)
-
-    # === 2. Extract bullet labels (lines with - or * followed by label:) ===
+    # === 4. Extract bullet labels ===
     for line_num, line, source in lines:
         line_stripped = line.strip()
 
         # Bullet with label pattern: "- **Label:** content" or "- Label: content"
         bullet_match = re.match(
-            r'^[-*•]\s*(?:\*\*)?([^:*\n]+?)(?:\*\*)?\s*:\s*(.*)$',
+            r'^[-*•]\s*(?:\*\*)?([^:*\n]{4,40})(?:\*\*)?\s*:\s*(.*)$',
             line_stripped
         )
         if bullet_match:
             label = bullet_match.group(1).strip()
-            rest = bullet_match.group(2).strip()
+            if len(label) >= 4:
+                add_handle(label, "bullet", 0.85, source, line_num, "bullet_label")
 
-            # The label is a high-quality handle
-            if len(label) >= 4 and len(label) <= 80:
-                add_handle(label, "bullet", 0.95, source, line_num)
-
-            # The rest of the bullet (after colon) is also valuable
-            if rest and len(rest) >= 15 and len(rest) <= 120:
-                add_handle(rest, "bullet", 0.88, source, line_num)
-
-        # Plain bullet lines (substantial content)
+        # Plain bullet lines (substantial content) - extract key phrase
         elif line_stripped.startswith(('-', '*', '•')):
             content = line_stripped.lstrip('-*•').strip()
-            if len(content) >= 20 and len(content) <= 120:
-                add_handle(content, "bullet", 0.75, source, line_num)
+            # Extract first meaningful phrase (before comma or dash)
+            for delim in [',', ' - ', '—', ';']:
+                if delim in content:
+                    first_part = content.split(delim, 1)[0].strip()
+                    if 8 <= len(first_part) <= 40:
+                        add_handle(first_part, "bullet", 0.75, source, line_num, "bullet_first_phrase")
+                    break
+            else:
+                if 8 <= len(content) <= 40:
+                    add_handle(content, "bullet", 0.70, source, line_num, "bullet_content")
 
-    # === 3. Extract from title (multi-word spans) ===
-    if title:
-        normalized_title = normalize_for_anchor(title)
-        if normalized_title and len(normalized_title) >= 8:
-            add_handle(normalized_title, "heading", 0.90, "title", 0)
-
-    # === 4. Extract headings from body ===
+    # === 5. Extract headings from body ===
     for line_num, line, source in lines:
         line_stripped = line.strip()
 
         # Markdown headings
         if line_stripped.startswith('#'):
             heading = line_stripped.lstrip('#').strip()
-            if heading and len(heading) >= 8 and len(heading) <= 100:
-                add_handle(heading, "heading", 0.85, source, line_num)
+            heading = normalize_for_anchor(heading)
+            if heading and len(heading) >= 4:
+                add_handle(heading, "heading", 0.92, source, line_num, "md_heading")
 
         # "Title: X" lines in body
         if line_stripped.lower().startswith('title:'):
             title_text = line_stripped[6:].strip()
-            # Strip any leading identifiers
-            title_text = re.sub(r'^[A-Z]+\s*[-–:]\s*', '', title_text)
-            if title_text and len(title_text) >= 8:
-                add_handle(title_text, "heading", 0.88, source, line_num)
+            title_text = normalize_for_anchor(title_text)
+            if title_text and len(title_text) >= 4:
+                add_handle(title_text, "heading", 0.90, source, line_num, "title_line")
 
-    # === 5. Extract named entities ===
-    full_text = (text or "") + "\n" + (title or "")
-
-    # Domain entities (multi-word preferred)
-    for entity in DOMAIN_ENTITIES:
-        if ' ' in entity:  # Prefer multi-word entities
-            pattern = re.compile(r'\b' + re.escape(entity) + r'\b', re.IGNORECASE)
-            for match in pattern.finditer(full_text):
-                original = match.group()
-                if len(original) >= 5:
-                    add_handle(original, "entity", 0.80, "body", 0)
-
-    # Capitalized noun phrases (The Entrance Way, QDPI Events)
-    for match in re.finditer(r'(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,5})', full_text):
-        phrase = match.group(0).strip()
-        if len(phrase) >= 8 and len(phrase) <= 60:
-            # Skip common patterns
-            if phrase.lower() not in {'this document', 'this is', 'what is', 'how to', 'the item'}:
-                add_handle(phrase, "entity", 0.72, "body", 0)
-
-    # === 6. Extract bold/quoted phrases ===
-    # Bold phrases (**text**)
+    # === 6. Extract bold phrases (strip the markdown) ===
     for match in re.finditer(r'\*\*([^*]+)\*\*', full_text):
-        phrase = match.group(1).strip()
-        if len(phrase) >= 8 and len(phrase) <= 80:
-            add_handle(phrase, "phrase", 0.78, "body", 0)
+        phrase = strip_all_quotes(match.group(1).strip())
+        if 6 <= len(phrase) <= 40:
+            add_handle(phrase, "phrase", 0.78, "body", 0, "bold_phrase")
 
-    # Quoted phrases ("text" or 'text')
-    for match in re.finditer(r'["\']([^"\']+)["\']', full_text):
-        phrase = match.group(1).strip()
-        if len(phrase) >= 8 and len(phrase) <= 80:
-            add_handle(phrase, "phrase", 0.75, "body", 0)
+    # === 7. Extract content from quoted phrases (extract CONTENT, not the quotes) ===
+    for match in re.finditer(r'["\'\u201c\u201d]([^"\'\u201c\u201d]+)["\'\u201c\u201d]', full_text):
+        phrase = match.group(1).strip()  # Get content inside quotes
+        if 6 <= len(phrase) <= 40:
+            add_handle(phrase, "phrase", 0.75, "body", 0, "quoted_content")
 
-    # Compound phrases with + or / (memory + inference, RAG / agents)
-    for match in re.finditer(r'([a-zA-Z]+(?:\s+[a-zA-Z]+)*\s*[+/&]\s*[a-zA-Z]+(?:\s+[a-zA-Z]+)*)', full_text):
-        phrase = match.group(1).strip()
-        if len(phrase) >= 8 and len(phrase) <= 60:
-            add_handle(phrase, "phrase", 0.70, "body", 0)
-
-    # === 7. Sentence fragments (fallback for prose-only content) ===
-    if len(handles) < 10:
-        for line_num, line, source in lines[:20]:
+    # === 8. Sentence fragments (fallback for prose-only content) ===
+    if len(handles) < 8:
+        for line_num, line, source in lines[:15]:
             line_stripped = line.strip()
 
             # Skip empty, headers, PAGE lines, already-processed bullets
@@ -284,27 +329,23 @@ def extract_handles(text: str, title: Optional[str] = None) -> List[Dict[str, An
             if line_stripped.startswith('#'):
                 continue
             if line_stripped.startswith(('-', '*', '•')):
-                continue  # Already handled
+                continue
 
-            # Extract meaningful sentence fragments
-            if len(line_stripped) >= 20 and len(line_stripped) <= 150:
-                # Prefer first clause before punctuation
-                for delim in ['—', ':', ';', ',', ' - ']:
+            # Extract first meaningful phrase (before punctuation)
+            if len(line_stripped) >= 15:
+                for delim in ['—', ':', ';', ',', ' - ', ' – ']:
                     if delim in line_stripped:
                         parts = line_stripped.split(delim, 1)
-                        if len(parts[0]) >= 15 and len(parts[0]) <= 80:
-                            add_handle(parts[0].strip(), "sentence", 0.50, source, line_num)
+                        first_part = strip_all_quotes(parts[0].strip())
+                        if 10 <= len(first_part) <= 40:
+                            add_handle(first_part, "sentence", 0.50, source, line_num, "first_clause")
                             break
-                else:
-                    # No delimiter found, use full sentence if appropriate length
-                    if len(line_stripped) <= 80:
-                        add_handle(line_stripped, "sentence", 0.45, source, line_num)
 
     # Sort by score descending
     handles.sort(key=lambda h: h["score"], reverse=True)
 
-    # Return up to 20 handles
-    return handles[:20]
+    # Return up to 15 handles (PASS 2: fewer but better)
+    return handles[:15]
 
 
 def choose_diverse_handles(handles: List[Dict[str, Any]], k: int = 8) -> List[Dict[str, Any]]:

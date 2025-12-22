@@ -356,28 +356,39 @@ function renderHololoopOptions() {
 
   const itemA = items.find(i => i.id === hololoopItemA);
   const itemB = items.find(i => i.id === hololoopItemB);
-  const nameA = itemA?.title?.substring(0, 25) || 'Item A';
-  const nameB = itemB?.title?.substring(0, 25) || 'Item B';
+  const nameA = itemA?.title?.substring(0, 20) || 'A';
+  const nameB = itemB?.title?.substring(0, 20) || 'B';
 
-  const optionsHtml = hololoopOptions.map((opt, idx) => `
-    <button class="hololoop-option-btn" data-option-index="${idx}">
-      <div class="hololoop-option-content">
-        <div class="hololoop-direction">
-          <span class="direction-label">${escapeHtml(nameA)} →</span>
-          <span class="direction-text">${escapeHtml(opt.link_text_forward)}</span>
+  // PASS 2: Clean presentation - two lines per option + handles underneath
+  const optionsHtml = hololoopOptions.map((opt, idx) => {
+    // Get handles used (shown small/muted underneath)
+    const handleA = opt.handle_a_used || '';
+    const handleB = opt.handle_b_used || '';
+    const handlesLine = (handleA && handleB)
+      ? `<div class="hololoop-handles-used">uses: ${escapeHtml(handleA)} • ${escapeHtml(handleB)}</div>`
+      : '';
+
+    return `
+      <button class="hololoop-option-btn" data-option-index="${idx}">
+        <div class="hololoop-option-content">
+          <div class="hololoop-line">
+            <span class="hololoop-arrow">A→B:</span>
+            <span class="hololoop-text">${escapeHtml(opt.link_text_forward)}</span>
+          </div>
+          <div class="hololoop-line">
+            <span class="hololoop-arrow">B→A:</span>
+            <span class="hololoop-text">${escapeHtml(opt.link_text_return)}</span>
+          </div>
+          ${handlesLine}
         </div>
-        <div class="hololoop-direction">
-          <span class="direction-label">${escapeHtml(nameB)} →</span>
-          <span class="direction-text">${escapeHtml(opt.link_text_return)}</span>
-        </div>
-      </div>
-    </button>
-  `).join('');
+      </button>
+    `;
+  }).join('');
 
   return `
     <div class="hololoop-options-container">
       <div class="hololoop-options-header">
-        <span class="hololoop-options-title">Choose a hololoop connection</span>
+        <span class="hololoop-options-title">Choose a hololoop</span>
         <span class="hololoop-options-subtitle">${escapeHtml(nameA)} ↔ ${escapeHtml(nameB)}</span>
       </div>
       <div class="hololoop-options-grid">

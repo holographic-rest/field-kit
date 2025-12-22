@@ -489,9 +489,50 @@ html, body {
 .hololoop-option-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
+/* PASS 2: Clean A→B / B→A presentation */
+.hololoop-line {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  line-height: 1.5;
+}
+
+.hololoop-arrow {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4ade80;
+  font-family: 'SF Mono', Monaco, monospace;
+  flex-shrink: 0;
+  min-width: 40px;
+}
+
+.hololoop-text {
+  font-size: 14px;
+  color: #ececec;
+  line-height: 1.5;
+  /* CRITICAL: Full text wrap - no truncation */
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.hololoop-handles-used {
+  font-size: 11px;
+  color: #666;
+  font-style: italic;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid #2a2a2a;
+  /* Wrap long handles */
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Legacy styles kept for compatibility */
 .hololoop-direction {
   display: flex;
   flex-direction: column;
@@ -515,7 +556,6 @@ html, body {
   font-size: 14px;
   color: #ececec;
   line-height: 1.6;
-  /* IMPORTANT: Full text - no truncation */
   white-space: normal;
   overflow: visible;
   overflow-wrap: anywhere;
