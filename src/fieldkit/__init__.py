@@ -13,6 +13,7 @@ from .schemas import (
     SYSTEM_ACTOR, USER_ACTOR,
     CANONICAL_EVENT_NAMES,
     BondKind,  # Queue Lattice: hololoop vs operator
+    ItemHandle,  # Queue Lattice: first-class handles
 )
 
 from .store_jsonl import Store, get_store, reset_store, dict_to_item, dict_to_bond, dict_to_episode
@@ -74,12 +75,25 @@ from .hololoop_engine import (
     options_to_bond_create_params,
 )
 
+from .hololink_pipeline import (
+    generate_hololink_options,
+    get_handles_for_item,
+    HololinkCandidate,
+)
+
+from .retrieval import (
+    find_related_items,
+    find_best_target_for_hololoop,
+    jaccard_similarity,
+)
+
 __all__ = [
     # Schemas
     "Network", "Episode", "Item", "Bond", "QDPIEvent",
     "Vec3", "ActorRef", "ErrorInfo",
     "ItemProvenanceUser", "ItemProvenanceBond", "ItemProvenanceHolologue",
     "BondKind",  # Queue Lattice: hololoop vs operator
+    "ItemHandle",  # Queue Lattice: first-class handles
     # ID generators
     "generate_network_id", "generate_episode_id", "generate_item_id",
     "generate_bond_id", "generate_event_id", "now_iso",
@@ -134,4 +148,12 @@ __all__ = [
     # Hololoop Engine (Queue Lattice)
     "generate_hololoop_options",
     "options_to_bond_create_params",
+    # Hololink Pipeline (Queue Lattice)
+    "generate_hololink_options",
+    "get_handles_for_item",
+    "HololinkCandidate",
+    # Retrieval (Queue Lattice)
+    "find_related_items",
+    "find_best_target_for_hololoop",
+    "jaccard_similarity",
 ]

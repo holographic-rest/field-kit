@@ -38,6 +38,7 @@ from fieldkit import (
     Network, Episode, Item, Bond,
     Vec3, ActorRef,
     ItemProvenanceUser, ItemProvenanceBond, ItemProvenanceHolologue,
+    ItemHandle,  # Queue Lattice: first-class handles
     # ID generators
     generate_network_id, generate_episode_id, generate_item_id,
     generate_bond_id, now_iso,
@@ -57,7 +58,10 @@ from fieldkit import (
     # Hololoop Engine (Queue Lattice)
     generate_hololoop_options,
     options_to_bond_create_params,
+    # Handles (Queue Lattice)
+    choose_diverse_handles,
 )
+from fieldkit.handles import extract_handles
 
 
 class FieldKitCLI:
@@ -217,6 +221,16 @@ class FieldKitCLI:
         item_id = generate_item_id()
         now = now_iso()
 
+        # Queue Lattice: Extract handles from content (3-7 per item)
+        handles = None
+        if item_type == "Q":
+            raw_handles = extract_handles(body or "", title)
+            selected_handles = choose_diverse_handles(raw_handles, k=5)
+            handles = [
+                ItemHandle(quote=h["quote"], kind=h["kind"], starred=False)
+                for h in selected_handles
+            ]
+
         item = Item(
             id=item_id,
             network_id=self._network_id,
@@ -230,6 +244,7 @@ class FieldKitCLI:
             created_at=now,
             updated_at=now,
             created_by_actor=USER_ACTOR,
+            handles=handles,  # Queue Lattice: store handles on Item
         )
         self.store.upsert_item(item)
 

@@ -38,10 +38,14 @@ load_dotenv_simple()
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from cli import FieldKitCLI
-from fieldkit import get_store, reset_store
+from fieldkit import get_store, reset_store, ItemHandle
 from fieldkit.spin_recipes import generate_suggestions_for_item, generate_proposals_for_holologue
 from fieldkit.generation import get_generation_mode, get_last_generation_warning
 from fieldkit.hololoop_engine import generate_hololoop_options, options_to_bond_create_params
+from fieldkit.hololink_pipeline import generate_hololink_options, get_handles_for_item
+from fieldkit.retrieval import find_related_items, find_best_target_for_hololoop
+from fieldkit.handles import extract_handles, choose_diverse_handles
+from fieldkit.store_jsonl import dict_to_item
 
 # Get data directory from environment or use default
 DATA_DIR = os.environ.get("FIELDKIT_DATA_DIR")
@@ -505,6 +509,293 @@ def api_ledger():
         "bonds": bonds,
         "events": events,
         "credits": cli._credits_balance,
+    })
+
+
+# === Queue Lattice: Handles API ===
+
+@app.route("/api/items/<item_id>/handles")
+def api_get_handles(item_id):
+    """Get handles for an item."""
+    cli = get_cli()
+    if not cli.store.is_initialized():
+        return jsonify({"error": "not_initialized"}), 400
+
+    item = cli.store.get_item(item_id)
+    if not item:
+        return jsonify({"error": "item_not_found"}), 404
+
+    handles = item.get("handles", [])
+
+    # If no stored handles, extract from content
+    if not handles:
+        raw = extract_handles(item.get("body") or "", item.get("title"))
+        selected = choose_diverse_handles(raw, k=5)
+        handles = [{"quote": h["quote"], "kind": h["kind"], "starred": False} for h in selected]
+
+    return jsonify({
+        "item_id": item_id,
+        "handles": handles,
+    })
+
+
+@app.route("/api/items/<item_id>/handles", methods=["PUT"])
+def api_update_handles(item_id):
+    """Update handles for an item (star/unstar, edit, add, remove)."""
+    cli = get_cli()
+    if not cli.store.is_initialized():
+        return jsonify({"error": "not_initialized"}), 400
+
+    item = cli.store.get_item(item_id)
+    if not item:
+        return jsonify({"error": "item_not_found"}), 404
+
+    data = request.json or {}
+    new_handles = data.get("handles", [])
+
+    # Validate handles (3-7 per item)
+    if len(new_handles) < 1 or len(new_handles) > 10:
+        return jsonify({"error": "invalid_handle_count"}), 400
+
+    # Convert to ItemHandle objects and update item
+    from fieldkit.schemas import now_iso
+    item["handles"] = new_handles
+    item["updated_at"] = now_iso()
+
+    # Save updated item
+    item_obj = dict_to_item(item)
+    cli.store.upsert_item(item_obj)
+
+    return jsonify({
+        "status": "updated",
+        "item_id": item_id,
+        "handles": new_handles,
+    })
+
+
+# === Queue Lattice: Related Items API ===
+
+@app.route("/api/items/<item_id>/related")
+def api_related_items(item_id):
+    """Get items related to the given item using local similarity.
+
+    Query params:
+    - k: Number of related items to return (default 5)
+    - method: Similarity method (jaccard|bm25|hybrid, default hybrid)
+    """
+    cli = get_cli()
+    if not cli.store.is_initialized():
+        return jsonify({"error": "not_initialized"}), 400
+
+    item = cli.store.get_item(item_id)
+    if not item:
+        return jsonify({"error": "item_not_found"}), 404
+
+    cli._load_context()
+
+    # Get all Q items in episode
+    all_items = cli.store.load_items({"episode_id": cli._episode_id})
+    q_items = [i for i in all_items if i["type"] == "Q"]
+
+    k = int(request.args.get("k", 5))
+    method = request.args.get("method", "hybrid")
+
+    related = find_related_items(item, q_items, k=k, method=method)
+
+    return jsonify({
+        "item_id": item_id,
+        "related": related,
+        "method": method,
+    })
+
+
+# === Queue Lattice: Draft Hololoop API ===
+
+@app.route("/api/draft-hololoop", methods=["POST"])
+def api_create_draft_hololoop():
+    """Auto-create a draft hololoop between two items.
+
+    Request body:
+    - source_item_id: The newly created item (or active item)
+    - target_item_id: Optional target item (if not provided, finds best match)
+
+    Returns the draft hololoop with one generated hololink option.
+    """
+    cli = get_cli()
+    if not cli.store.is_initialized():
+        return jsonify({"error": "not_initialized"}), 400
+
+    data = request.json or {}
+    source_item_id = data.get("source_item_id")
+    target_item_id = data.get("target_item_id")
+
+    if not source_item_id:
+        return jsonify({"error": "missing_source_item_id"}), 400
+
+    source_item = cli.store.get_item(source_item_id)
+    if not source_item:
+        return jsonify({"error": "source_item_not_found"}), 404
+
+    cli._load_context()
+
+    # Get target item (provided or find best match)
+    if target_item_id:
+        target_item = cli.store.get_item(target_item_id)
+        if not target_item:
+            return jsonify({"error": "target_item_not_found"}), 404
+    else:
+        # Find best target using retrieval
+        all_items = cli.store.load_items({"episode_id": cli._episode_id})
+        q_items = [i for i in all_items if i["type"] == "Q" and i["id"] != source_item_id]
+        target_item = find_best_target_for_hololoop(source_item, q_items)
+        if not target_item:
+            return jsonify({"error": "no_target_available"}), 400
+
+    # Generate hololink options using the new pipeline
+    result = generate_hololink_options(source_item, target_item, return_debug=True)
+    options = result.get("options", [])
+
+    if not options:
+        return jsonify({"error": "no_hololink_options_generated"}), 500
+
+    # Use first option as the draft
+    selected = options[0]
+
+    # Create draft hololoop bond
+    bond_id = cli.cmd_hololoop_create(
+        source_item["id"],
+        target_item["id"],
+        option_index=1,
+    )
+
+    bond = cli.store.get_bond(bond_id)
+
+    return jsonify({
+        "status": "draft_created",
+        "bond": bond,
+        "source_item": source_item,
+        "target_item": target_item,
+        "hololink": {
+            "link_text_forward": selected["link_text_forward"],
+            "link_text_return": selected["link_text_return"],
+            "handle_a_used": selected.get("handle_a_used"),
+            "handle_b_used": selected.get("handle_b_used"),
+        },
+        "all_options": options,  # For "regenerate" functionality
+    })
+
+
+@app.route("/api/draft-hololoop/<bond_id>/regenerate", methods=["POST"])
+def api_regenerate_draft_hololoop(bond_id):
+    """Regenerate hololink options for an existing draft hololoop."""
+    cli = get_cli()
+    if not cli.store.is_initialized():
+        return jsonify({"error": "not_initialized"}), 400
+
+    bond = cli.store.get_bond(bond_id)
+    if not bond:
+        return jsonify({"error": "bond_not_found"}), 404
+
+    if bond.get("bond_kind") != "hololoop":
+        return jsonify({"error": "not_a_hololoop"}), 400
+
+    if bond.get("status") != "draft":
+        return jsonify({"error": "bond_not_draft"}), 400
+
+    input_item_ids = bond.get("input_item_ids", [])
+    if len(input_item_ids) != 2:
+        return jsonify({"error": "invalid_input_items"}), 400
+
+    source_item = cli.store.get_item(input_item_ids[0])
+    target_item = cli.store.get_item(input_item_ids[1])
+
+    if not source_item or not target_item:
+        return jsonify({"error": "items_not_found"}), 404
+
+    # Generate new options
+    result = generate_hololink_options(source_item, target_item, return_debug=True)
+
+    return jsonify({
+        "bond_id": bond_id,
+        "options": result.get("options", []),
+        "source": result.get("source"),
+        "debug": result.get("debug"),
+    })
+
+
+@app.route("/api/draft-hololoop/<bond_id>/accept", methods=["POST"])
+def api_accept_draft_hololoop(bond_id):
+    """Accept a draft hololoop (add to curated_bond_ids)."""
+    cli = get_cli()
+    if not cli.store.is_initialized():
+        return jsonify({"error": "not_initialized"}), 400
+
+    bond = cli.store.get_bond(bond_id)
+    if not bond:
+        return jsonify({"error": "bond_not_found"}), 404
+
+    if bond.get("bond_kind") != "hololoop":
+        return jsonify({"error": "not_a_hololoop"}), 400
+
+    cli._load_context()
+
+    # Add to curated bonds (acceptance action)
+    cli.cmd_curate_bond_add(bond_id)
+
+    return jsonify({
+        "status": "accepted",
+        "bond_id": bond_id,
+    })
+
+
+@app.route("/api/draft-hololoop/<bond_id>/update", methods=["PUT"])
+def api_update_draft_hololoop(bond_id):
+    """Update a draft hololoop with new link text or target.
+
+    Request body:
+    - link_text_forward: Optional new A→B text
+    - link_text_return: Optional new B→A text
+    - target_item_id: Optional new target item
+    """
+    cli = get_cli()
+    if not cli.store.is_initialized():
+        return jsonify({"error": "not_initialized"}), 400
+
+    bond = cli.store.get_bond(bond_id)
+    if not bond:
+        return jsonify({"error": "bond_not_found"}), 404
+
+    if bond.get("bond_kind") != "hololoop":
+        return jsonify({"error": "not_a_hololoop"}), 400
+
+    if bond.get("status") != "draft":
+        return jsonify({"error": "bond_not_draft"}), 400
+
+    data = request.json or {}
+
+    # Update fields
+    from fieldkit.schemas import now_iso
+    from fieldkit.store_jsonl import dict_to_bond
+
+    if "link_text_forward" in data:
+        bond["link_text_forward"] = data["link_text_forward"]
+    if "link_text_return" in data:
+        bond["link_text_return"] = data["link_text_return"]
+    if "target_item_id" in data:
+        new_target = cli.store.get_item(data["target_item_id"])
+        if not new_target:
+            return jsonify({"error": "target_item_not_found"}), 404
+        bond["input_item_ids"] = [bond["input_item_ids"][0], data["target_item_id"]]
+
+    bond["updated_at"] = now_iso()
+
+    # Save updated bond
+    bond_obj = dict_to_bond(bond)
+    cli.store.upsert_bond(bond_obj)
+
+    return jsonify({
+        "status": "updated",
+        "bond": bond,
     })
 
 

@@ -926,6 +926,265 @@ html, body {
   }
 }
 
+/* === Queue Lattice Sprint Styles === */
+
+/* Version stamp in header */
+.version-stamp {
+  font-size: 10px;
+  color: #555;
+  font-family: 'SF Mono', Monaco, monospace;
+  padding: 4px 8px;
+  background: #1a1a1a;
+  border-radius: 4px;
+}
+
+/* Item header with focus button */
+.item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.item-focus-btn {
+  background: transparent;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  color: #555;
+  font-size: 14px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.item-focus-btn:hover {
+  background: #2a2a2a;
+  color: #888;
+  border-color: #4a4a4a;
+}
+
+/* Active item highlight */
+.item-container.active {
+  border-color: #4ade80 !important;
+  box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.2);
+}
+
+.item-container.active .item-focus-btn {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.4);
+}
+
+/* Item handles */
+.item-handles {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #2a2a2a;
+}
+
+.handles-label {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.handles-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.handle-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.handle-chip.starred {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.handle-text {
+  color: #aaa;
+  font-style: italic;
+}
+
+.handle-star {
+  background: none;
+  border: none;
+  color: #444;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.handle-chip.starred .handle-star,
+.handle-star:hover {
+  color: #fbbf24;
+}
+
+/* Hololink on item */
+.item-hololink {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #1a1a1a;
+  border: 1px dashed #333;
+  border-radius: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.hololink-arrow {
+  color: #4ade80;
+  font-size: 16px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.hololink-text {
+  color: #aaa;
+  font-size: 13px;
+  line-height: 1.4;
+  font-style: italic;
+}
+
+/* Draft hololoop section */
+.draft-hololoop-section {
+  background: #1a2a1a;
+  border: 1px solid #2a4a2a;
+  border-radius: 12px;
+  padding: 16px;
+  margin: 20px 0;
+}
+
+.draft-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.draft-label {
+  font-weight: 600;
+  color: #4ade80;
+  font-size: 14px;
+}
+
+.draft-status {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  background: #2a2a2a;
+  border-radius: 4px;
+}
+
+.draft-items {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 10px;
+  background: #2a2a2a;
+  border-radius: 8px;
+}
+
+.draft-item {
+  flex: 1;
+  font-size: 13px;
+  color: #ccc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.draft-connector {
+  color: #4ade80;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.draft-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.draft-link {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #1a1a1a;
+  border-radius: 6px;
+}
+
+.link-direction {
+  color: #4ade80;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.link-text {
+  color: #aaa;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.draft-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.draft-btn {
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.draft-btn.accept {
+  background: #1a3a1a;
+  border: 1px solid #4ade80;
+  color: #4ade80;
+}
+
+.draft-btn.accept:hover {
+  background: #2a4a2a;
+}
+
+.draft-btn.edit,
+.draft-btn.regenerate,
+.draft-btn.change-target {
+  background: transparent;
+  border: 1px solid #3a3a3a;
+  color: #888;
+}
+
+.draft-btn.edit:hover,
+.draft-btn.regenerate:hover,
+.draft-btn.change-target:hover {
+  background: #2a2a2a;
+  color: #ccc;
+  border-color: #4a4a4a;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .header {

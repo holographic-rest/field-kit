@@ -219,6 +219,21 @@ ItemProvenance = Union[ItemProvenanceUser, ItemProvenanceBond, ItemProvenanceHol
 # === Item ===
 
 @dataclass
+class ItemHandle:
+    """A handle (anchor phrase) extracted from Item content."""
+    quote: str              # Verbatim substring from item
+    kind: str               # bullet | colon | entity | phrase | sentence | heading
+    starred: bool = False   # User starred this handle
+
+    def to_dict(self) -> dict:
+        return {
+            "quote": self.quote,
+            "kind": self.kind,
+            "starred": self.starred,
+        }
+
+
+@dataclass
 class Item:
     id: str
     network_id: str
@@ -234,6 +249,8 @@ class Item:
     body: Optional[str] = None
     archived_at: Optional[str] = None
     created_by_actor: Optional[ActorRef] = None
+    # Queue Lattice: Handles as first-class field (3-7 handles per item)
+    handles: Optional[List[ItemHandle]] = None
 
     def to_dict(self) -> dict:
         d = {
@@ -255,6 +272,9 @@ class Item:
             d["archived_at"] = self.archived_at
         if self.created_by_actor:
             d["created_by_actor"] = self.created_by_actor.to_dict()
+        # Queue Lattice: Include handles in serialization
+        if self.handles:
+            d["handles"] = [h.to_dict() for h in self.handles]
         return d
 
 

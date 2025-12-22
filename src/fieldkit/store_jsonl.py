@@ -24,7 +24,7 @@ from .schemas import (
     generate_event_id, now_iso, SYSTEM_ACTOR,
     Vec3, ActorRef,
     ItemProvenanceUser, ItemProvenanceBond, ItemProvenanceHolologue,
-    ErrorInfo,
+    ErrorInfo, ItemHandle,
 )
 
 
@@ -301,6 +301,14 @@ def dict_to_item(d: dict) -> Item:
         a = d["created_by_actor"]
         actor = ActorRef(kind=a["kind"], id=a.get("id"), display=a.get("display"))
 
+    # Queue Lattice: Parse handles if present
+    handles = None
+    if "handles" in d and d["handles"]:
+        handles = [
+            ItemHandle(quote=h["quote"], kind=h["kind"], starred=h.get("starred", False))
+            for h in d["handles"]
+        ]
+
     return Item(
         id=d["id"],
         network_id=d["network_id"],
@@ -316,6 +324,7 @@ def dict_to_item(d: dict) -> Item:
         body=d.get("body"),
         archived_at=d.get("archived_at"),
         created_by_actor=actor,
+        handles=handles,
     )
 
 
