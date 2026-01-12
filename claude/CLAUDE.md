@@ -1,54 +1,95 @@
-# CLAUDE.md — Field-Kit v0.1 Build Guardrails (Source of Truth)
+# CLAUDE.md — Field-Kit v0.1 Guardrails (Queue Lattice Rewrite)
 
 You are Claude Code working inside the **field-kit** repo.
 
-Your job is to **implement Field-Kit v0.1 exactly as specified** (no feature invention), with a runnable minimal prototype that can execute the **Demo Golden Flow v0.1** end-to-end.
+Your job is to implement the system described in `/docs/specs/` with **Queue Lattice as the primary ontology**, and to keep the project **buildable, testable, and non-drifting** while we iterate.
+
+This is **not** a chat app. The UI may *look* chat-like, but the ontology is **artifact → links → operators → new artifacts**.
 
 ---
 
-## 1) Source of truth
+## 0) Read this first: the mental model (non-negotiable)
 
-**All product + data + event decisions are locked by these specs:**
-`/docs/specs/*.md`
+### Items are artifacts
 
-Do not “improve” the system by changing terminology, schemas, or event names unless the user explicitly asks you to revise specs.
+* Creating an Item is **minting a persisted object** (a page / note / artifact).
+* By default, a newly created Item is a **Queue** Item (Q).
+* Users can create Items that **do nothing** unless acted upon.
 
-**Acceptance test:** `/docs/specs/05_demo_golden_flow_v0.1.md`  
-If implementation choices are unclear, default to what makes Golden Flow executable without improvising.
+### Hololinks and hololoops are navigation
+
+* A **Hololink** is a **one-way** sentence link from Item A → Item B.
+* A **Hololoop / Bonded loop** is **two** hololinks selected (A→B and B→A), forming a **two-way navigable bond**.
+* The early system should feel like: **create Qs → choose hololinks to connect Qs → build the lattice**.
+
+### Bonds cause generation (operators)
+
+* **Only execution of an operator bond produces a new Item.**
+* Do not collapse “typed text” into both Item creation and Bond authoring.
+* The UI MUST clearly separate:
+
+  * **Create Item** input (mints Q)
+  * **Bond authoring / selection** input (targets an existing Item)
+
+Queue Lattice spec is the reference for how this should feel.
 
 ---
 
-## 2) v0.1 non-negotiable constraints
+## 1) Source of truth (priority order)
+
+**Primary ontology:**
+
+* `/docs/specs/09_queue_lattice_v0.1.md` (highest priority)
+
+**Suite:**
+
+* `/docs/specs/01_*.md` through `/docs/specs/08_*.md`
+
+If any older doc contradicts `09`, **follow 09** and surface the contradiction in a short note.
+
+**Acceptance tests:**
+
+* `/docs/specs/05_demo_golden_flow_v0.1.md` (may be rewritten by Composer; treat the repo’s current version as authoritative)
+* Existing test scripts under `prototype/scripts/` must continue to pass unless the updated specs intentionally change them.
+
+---
+
+## 2) v0.1 constraints (still true)
 
 ### Private • Local only
-- No accounts / sign-in / identity
-- No cloud sync / collaboration / sharing / publishing
-- No network dependency required to browse existing data (Field + Ledger)
+
+* No accounts / sign-in / identity
+* No cloud sync / collaboration / sharing / publishing
+* No network dependency required to browse existing data (Field + Ledger)
 
 ### No money rails
-- No Stripe/subscriptions
-- No crypto/blockchain
-- No KYC/AML
-- No redemption/cash-out
+
+* No Stripe/subscriptions
+* No crypto/blockchain
+* No KYC/AML
+* No redemption/cash-out
 
 ### Credits are simulation only
-- Credits are **local-only**
-- Credits are **not transferable**
-- Credits are **not redeemable**
-- Credits are recorded only as events (`credits.delta`) and a derived balance UI chip (if UI exists)
+
+* Credits are local-only, not transferable, not redeemable
+* Credits recorded only as events: `credits.delta`
+* UI may show a derived credits chip, but ledger is the source of truth
 
 ---
 
 ## 3) Canonical vocabulary (do not rename)
 
-Use these exact terms as defined in the specs:
-- Episode / Item / Bond / QDPIEvent / Proposal / Canon / Bundle
+Use these terms consistently (as defined in specs, especially `09`):
 
-Important: **Canon is a derived projection** (curated lists on Episode), not a new “Canon object.”
+* Episode / Item / Hololink / Hololoop (Bonded loop) / Bond / QDPIEvent / Proposal / Canon / Bundle
+
+**Important:** Canon is a **derived projection** (curated lists on Episode), not a “Canon object.”
+
+**Also important:** Q means **Queue**, not Question/Query.
 
 ---
 
-## 4) Canonical event taxonomy (do not invent new event names)
+## 4) Canonical event taxonomy (do not invent new names)
 
 The v0.1 event log uses ONLY these names:
 
@@ -72,118 +113,142 @@ The v0.1 event log uses ONLY these names:
 * `store.commit_failed`
 * `credits.delta`
 
-If you need intermediate UI phases (streaming, placeholder display, run started), those are **UI state only** and must NOT create new event names.
+If you need intermediate UI phases (streaming, placeholder display, “run started”), those are **UI state only** and must NOT create new event names.
 
 ### Event schema invariants
-- Use the field name `direction` (not `flow`)
-- `direction` values are limited to: `user→field` and `system→field` (anything else is debug-only and OFF by default)
-- Events are append-only and immutable
-- Event ordering is by `(episode_id, seq)` where `seq` is monotonic per Episode
+
+* Field name is `direction` (not `flow`)
+* `direction` values limited to: `user→field` and `system→field`
+* Events are append-only and immutable
+* Event ordering is `(episode_id, seq)` monotonic per Episode
 
 ---
 
-## 5) Canonical QDPI tagging scheme (must match the suite)
+## 5) Canonical QDPI tagging (must match suite)
 
-Use:
-- **Q (Queue):** requests + inspection + bookkeeping  
-  Examples: `bond.run_requested`, `ledger.opened`, `store.commit`, `credits.delta`, suggestions/proposals presented
-- **D (Dialogue):** user-confirmed structure decisions  
-  Example: `bond.draft_created`
-- **M (Monologue):** system outputs/completions  
-  Examples: `bond.executed`, `bond.execution_failed`
-- **H (Holologue):** holologue lifecycle  
-  Examples: `holologue.run_requested`, `holologue.completed`, `holologue.failed`, `holologue.validation_failed`
+* **Q (Queue):** requests + inspection + bookkeeping + suggestions/proposals presented
+* **D (Dialogue):** user-confirmed structural decisions (e.g., bond draft created)
+* **M (Monologue):** system completions / outputs (`bond.executed`, `bond.execution_failed`)
+* **H (Holologue):** holologue lifecycle (`holologue.*`)
 
 ---
 
-## 6) Canonical object model rules (do not violate)
+## 6) Object model rules (follow specs; don’t invent statuses)
 
-### Bond lifecycle (hard rule)
-- Draft: `status:"draft"` AND `output_item_id:null`
-- Executed: `status:"executed"` AND `output_item_id` is non-null
-- Failure model: stays `draft` + `last_error` (no third status in v0.1)
+### IDs and JSON conventions
+
+* `snake_case` keys for persisted JSON
+* IDs use prefixes: `nw_`, `ep_`, `it_`, `bd_`, `ev_`
+
+### Bond lifecycle (operator bonds)
+
+* Draft: `status:"draft"` AND `output_item_id:null`
+* Executed: `status:"executed"` AND `output_item_id` non-null
+* Failure: remains draft + `last_error` (no third status)
+
+### Link-only bonds / hololoops
+
+Queue lattice introduces **link-only** connections between Queue items.
+
+**Do NOT invent a new event name or a new status ad hoc.**
+Represent link-only hololinks/hololoops exactly as the updated specs specify.
+
+If the updated specs require a schema extension (e.g., `bond_kind` or `link_text_forward/link_text_return`), implement it as:
+
+* **optional fields**
+* backwards compatible
+* explicitly documented in `02_core_data_objects_v0.1.md`
+
+If the specs are ambiguous, stop and propose the smallest extension.
 
 ### Proposals are events-only
-- Suggestions/proposals are **never persisted as Bonds** until the user explicitly confirms **Create Bond**.
 
-### Holologue semantics (hard rule)
-- many→one: one run produces **exactly one** output Item (type `H`)
-- not summary-by-default: output must be a usable artifact
-- proposals from Holologue are events-only (`bond.proposals.presented`)
+* Suggestions/proposals must remain events-only until user confirms creation of a persisted Bond or Link-only structure (per updated specs).
 
-### Canon / curation (v0.1)
-- Episode may include optional:
-  - `curated_item_ids?: string[]`
-  - `curated_bond_ids?: string[]`
-- Curated view is derived from those lists and filters out archived/missing objects (per Canon Policy)
+### Holologue semantics
 
-### JSON conventions
-- Use `snake_case` for field names in persisted JSON and examples
-- IDs use prefixes: `nw_`, `ep_`, `it_`, `bd_`, `ev_`
+* many→one: one run produces exactly one output Item type `H`
+* not-summary-by-default: output must be a usable artifact
+* holologue proposals are events-only: `bond.proposals.presented`
 
 ---
 
-## 7) Credits event shape (do not drift)
+## 7) UI guardrails (Queue Lattice behavior)
 
-Credits changes are recorded as:
-- event name: `credits.delta`
-- `qdpi:"Q"`, `direction:"system→field"`
-- `refs` MUST include:
-  - `delta` (int)
-  - `balance_after` (int)
-  - `reason` (string)
-- Optional direct refs (no `related_*` keys):
-  - `item_id`, `bond_id`, `output_item_id`, `event_id`
+The UI should resemble the wrapper’s cleanliness, but **must behave like the lattice**.
 
-Never emit keys like `related_bond_id`.
+### Absolute UI requirements
 
----
+* **No Q/M/D/H dropdown at Item creation.**
+* “Create Item” mints a Queue Item immediately.
+* After creating (or selecting) an Item, the system shows **4 suggestions** that are:
 
-## 8) UI constraints (if/when UI is implemented)
+  * readable in full (no ellipsis truncation)
+  * specific to the content (not generic templates)
+  * navigational hololink sentences (not “expand X into checklist” boilerplate)
 
-- Primary surface: Field (Item list, bottom-append)
-- Operator drawer: suggestions → prompt editor → run state
-- Ledger drawer: Objects / Events / Curated (Canon Projection) / JSON
-- “Ephemeral run card” is **UI-only** until success; do not persist placeholder Items.
+### Two separate inputs (never collapse them)
 
-Keep “magic” visuals only at invocation moments (suggestions/proposals + running/streaming), and keep the rest calm/minimal.
+1. **Create Item** (global composer) → creates a new Queue Item
+2. **Create Bond / Hololink** (per-item) → creates a bond/hololink that targets an existing Item
 
----
+Typing into the “bond” input must never mint a Queue Item.
 
-## 9) Implementation order (do not reorder)
+### Execution
 
-Implement the **Bootstrap Floor** in this strict order:
-1) Storage (JSONL or SQLite)
-2) Append-only QDPIEvent logger
-3) Create Item
-4) Create Bond (draft)
-5) Run Bond → output Item + `bond.executed`
-6) Run Holologue → output Item + `holologue.completed` (+ optional proposals event)
-7) Ledger viewer (objects + events + JSON)
-8) Credits.delta + derived balance
+* Selecting a suggested operator bond or typing a bond creates a draft bond.
+* Only executing the bond produces a new Item output.
+* Output items must show lineage back to their source Queue.
 
-Only after the above passes, start polishing UI/UX.
+### Tutorial
+
+* Optional. If broken, do not block core lattice behavior.
 
 ---
 
-## 10) Working style (how to avoid drift)
+## 8) Implementation posture (how to work without drift)
 
-- Make changes in small increments.
-- After each increment, run the smallest possible proof:
-  - can we create an Item and see it persisted + evented?
-  - can we execute one Bond and verify lineage in Ledger?
-  - can we run Holologue and see one artifact output?
-- If you encounter ambiguity or a spec contradiction:
-  - STOP and report the exact doc + section causing conflict.
-  - Propose the smallest resolution that preserves v0.1 constraints.
-  - Do not invent a new model.
+### Keep the core stable
+
+* Don’t break headless acceptance tests unless the updated specs require it.
+* Add new behavior behind clear flags/config where helpful (e.g., “queue lattice mode”).
+
+### Prefer small increments + runnable checks
+
+After each change, run:
+
+* relevant sprint test(s)
+* Golden Flow script(s)
+* any Queue Lattice specific test(s) added in this rewrite
+
+### If confused, don’t improvise new concepts
+
+* Cite exact doc + section
+* Propose smallest resolution
+* Wait for user approval if it’s a spec-level change
 
 ---
 
-## 11) Definition of “done” for Claude
+## 9) Repo hygiene (still required)
 
-You are done when:
-- The **Demo Golden Flow v0.1** can be executed end-to-end without improvising
-- Objects/events match schemas and naming exactly
-- No v0.1 non-goals are violated
-- The repo contains a minimal runnable prototype and clear run instructions
+* Never commit runtime JSONL stores
+* `.env` must remain gitignored
+* Keep `FIELDKIT_DATA_DIR` / `--data-dir` workflow functional
+
+---
+
+## 10) Definition of “done” (current phase)
+
+You are done for a sprint when:
+
+* The updated specs (including `09_queue_lattice_v0.1.md`) are implementable in code
+* Queue Item creation is artifact-first (no dropdown)
+* Queue-to-Queue lattice linking works (hololinks/hololoops per spec)
+* Suggestions are content-derived and readable
+* Operator execution produces new Items with lineage
+* Ledger remains inspectable and canonical event names remain intact
+* Tests pass and changes are committed cleanly (no runtime data)
+
+---
+
+If you want, I can also generate a **fresh “Sprint Plan v2”** doc that matches Queue Lattice (and replaces the old tutorial/golden-flow-first mindset) once Composer finishes rewriting the 8 specs.

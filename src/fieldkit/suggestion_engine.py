@@ -480,3 +480,244 @@ def suggestions_to_legacy_format(result: Dict[str, Any]) -> List[Dict[str, Any]]
         })
 
     return legacy
+
+
+def generate_bond_suggestions_with_evidence(
+    item: Dict[str, Any],
+    return_debug: bool = False,
+    data_dir: Optional[str] = None,
+    session_state: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """
+    Generate bond suggestions with evidence shards (pointer-style).
+
+    This is the S03 version that produces structured candidates with:
+    - Evidence shards citing the handle location
+    - Probabilities from pointer scorer
+    - Structured candidate objects
+
+    S04: Added multi-scale context aggregation. If data_dir is provided,
+    attempts to add mid/far scale evidence from event history.
+
+    S05: Added graph propagation reranking. Uses MPNN-style message passing
+    to improve candidate scoring based on graph structure.
+
+    S07: Added session_state parameter. If provided, uses state to bias
+    evidence selection toward entities/open_questions in state.
+
+    Args:
+        item: The item dict with id, title, body
+        return_debug: Include debug info
+        data_dir: Optional data directory for multi-scale sampling
+        session_state: Optional SessionState for continuity (S07)
+
+    Returns:
+        Dict with:
+        - suggestions: List of suggestion dicts (legacy compatible)
+        - candidates: List of Candidate objects (as dicts)
+        - suggestion_source: "llm" | "fallback"
+        - has_evidence: Count of suggestions with evidence
+        - scales_present: Set of scales found in evidence (S04)
+        - state_utilized: Whether session_state influenced results (S07)
+    """
+    from .candidate_set import (
+        Candidate, EvidenceShard,
+        generate_candidate_id, generate_shard_id,
+        create_evidence_from_handle,
+    )
+    from .pointer_scorer import score_candidates, select_top_k
+
+    item_title = item.get("title", "")
+    item_body = item.get("body")
+    item_id = item.get("id", "")
+
+    # S07: Extract state influence keywords
+    state_keywords = set()
+    state_utilized = False
+    if session_state is not None:
+        try:
+            from .session_state import get_state_influence_keywords
+            state_keywords = get_state_influence_keywords(session_state)
+            if state_keywords:
+                state_utilized = True
+        except ImportError:
+            pass  # Session state module not available
+
+    # Get base suggestions
+    result = generate_bond_suggestions(item_title, item_body, return_debug)
+    suggestions = result.get("suggestions", [])
+    source = result.get("suggestion_source", "fallback")
+
+    # S04: Sample multi-scale context if data_dir provided
+    context_pack = None
+    if data_dir:
+        try:
+            from .dilated_context import DilatedContextSampler
+            sampler = DilatedContextSampler(data_dir)
+            context_pack = sampler.sample(item_id)
+        except Exception:
+            pass  # Best effort - continue without multi-scale
+
+    # Convert to candidates with evidence
+    candidates = []
+    for i, s in enumerate(suggestions):
+        handle = s.get("handle_quote", "")
+        prompt = s.get("prompt_text", "")
+        intent = s.get("intent", "clarify")
+
+        # Create candidate
+        candidate = Candidate(
+            candidate_id=generate_candidate_id(item_id, prompt[:50]),
+            target_type="suggestion",
+            target_id=None,
+            title=prompt[:100] if len(prompt) > 100 else prompt,
+            summary=prompt,
+            intent_type=intent,
+            handle_quote=handle,
+            source=source,
+            rank=i + 1,
+        )
+
+        # Create local evidence shard from the handle
+        if handle:
+            source_text = item_body or item_title
+            if source_text:
+                evidence = create_evidence_from_handle(item, handle)
+                # Ensure scale and dilation_offset are set
+                evidence.scale = "local"
+                evidence.dilation_offset = 0
+                candidate.evidence_shards.append(evidence)
+
+        # S04: Try to add mid/far evidence from context pack
+        # S07: Pass state keywords to bias evidence selection
+        if context_pack and handle:
+            _add_multiscale_evidence(candidate, context_pack, handle, state_keywords)
+
+        candidates.append(candidate)
+
+    # Score candidates and get probabilities
+    candidates = score_candidates(candidates)
+
+    # S05: Graph propagation reranking if data_dir provided
+    if data_dir:
+        try:
+            from .graph_propagation import GraphReranker
+            reranker = GraphReranker(data_dir, propagation_rounds=2, graph_weight=0.3)
+            candidates = reranker.rerank(item_id, candidates, use_propagation=True)
+        except Exception:
+            pass  # Best effort - continue without graph reranking
+
+    candidates = select_top_k(candidates, k=4, diversify=True)
+
+    # Update suggestions with evidence data for backward compatibility
+    enhanced_suggestions = []
+    scales_present = set()
+
+    for c in candidates:
+        # Track scales present
+        for es in c.evidence_shards:
+            scales_present.add(es.scale)
+
+        s = {
+            "intent": c.intent_type,
+            "handle_quote": c.handle_quote,
+            "prompt_text": c.summary,
+            "why": f"Based on \"{c.handle_quote[:30]}...\"" if len(c.handle_quote) > 30 else f"Based on \"{c.handle_quote}\"",
+            # Add evidence fields
+            "evidence_shards": [es.to_dict() for es in c.evidence_shards],
+            "candidate_id": c.candidate_id,
+            "probability": c.probability,
+            "score": c.score,
+            "rank": c.rank,
+        }
+        enhanced_suggestions.append(s)
+
+    # Count evidence
+    has_evidence = sum(1 for c in candidates if c.has_evidence())
+
+    output = {
+        "suggestions": enhanced_suggestions,
+        "candidates": [c.to_dict() for c in candidates],
+        "suggestion_source": source,
+        "has_evidence": has_evidence,
+        "scales_present": list(scales_present),  # S04
+        "state_utilized": state_utilized,  # S07
+        "warning": result.get("warning"),
+    }
+
+    if return_debug:
+        output["debug"] = result.get("debug", {})
+
+    return output
+
+
+def _add_multiscale_evidence(
+    candidate,
+    context_pack,
+    handle: str,
+    state_keywords: Optional[set] = None,
+) -> None:
+    """
+    Add mid/far scale evidence to a candidate (S04, S07).
+
+    Best-effort: searches context items for matching keywords.
+
+    S07: If state_keywords provided, prioritizes items matching those keywords.
+    """
+    from .candidate_set import EvidenceShard, generate_shard_id
+    from .dilated_context import find_matching_text_in_item
+
+    # Extract keywords from handle for matching
+    keywords = handle.split()
+    if len(keywords) > 3:
+        keywords = keywords[:3]  # Use first 3 words
+
+    # S07: Add state keywords to search terms if available
+    if state_keywords:
+        keywords = list(set(keywords) | set(list(state_keywords)[:3]))
+
+    # Try to find mid-scale evidence
+    for ctx_item in context_pack.mid_items[:3]:  # Check up to 3 mid items
+        item_dict = {
+            "id": ctx_item.item_id,
+            "title": ctx_item.title,
+            "body": ctx_item.body,
+        }
+        match = find_matching_text_in_item(item_dict, keywords)
+        if match:
+            text_span, span_start, span_end = match
+            shard = EvidenceShard(
+                shard_id=generate_shard_id(ctx_item.item_id, text_span),
+                source_type="item",
+                source_id=ctx_item.item_id,
+                text_span=text_span,
+                span_start=span_start,
+                span_end=span_end,
+                scale="mid",
+                dilation_offset=ctx_item.dilation_offset,
+            )
+            candidate.evidence_shards.append(shard)
+            break  # One mid shard is enough
+
+    # Try to find far-scale evidence
+    for ctx_item in context_pack.far_items[:3]:  # Check up to 3 far items
+        item_dict = {
+            "id": ctx_item.item_id,
+            "title": ctx_item.title,
+            "body": ctx_item.body,
+        }
+        match = find_matching_text_in_item(item_dict, keywords)
+        if match:
+            text_span, span_start, span_end = match
+            shard = EvidenceShard(
+                shard_id=generate_shard_id(ctx_item.item_id, text_span),
+                source_type="item",
+                source_id=ctx_item.item_id,
+                text_span=text_span,
+                span_start=span_start,
+                span_end=span_end,
+                scale="far",
+                dilation_offset=ctx_item.dilation_offset,
+            )
+            candidate.evidence_shards.append(shard)
+            break  # One far shard is enough

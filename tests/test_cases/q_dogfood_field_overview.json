@@ -1,0 +1,19 @@
+{
+  "name": "q_synthetic_field_overview",
+  "description": "Queue-stage suggestions for a synthetic Field Overview item",
+  "qdpi_stage": "Q",
+  "seed": {
+    "type": "golden_flow"
+  },
+  "subject_item_id": "dynamic:0",
+  "k": 4,
+  "acceptable_targets": {
+    "type": "intent_types",
+    "values": ["clarify", "concretize", "connect", "test"]
+  },
+  "expected_evidence": {
+    "min_with_evidence": 0,
+    "notes": "Current system does not produce evidence shards"
+  },
+  "notes": "Uses golden flow to generate fresh data. Tests intent-type based acceptability."
+}

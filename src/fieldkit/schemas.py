@@ -419,4 +419,7 @@ CANONICAL_EVENT_NAMES = [
     "store.commit",
     "store.commit_failed",
     "credits.delta",
+    # S03: Pointer-based navigation events
+    "hololink.candidates_generated",
+    "hololink.pointer_selected",
 ]

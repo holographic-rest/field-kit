@@ -10,7 +10,7 @@
 
 ## 2) Purpose
 
-This 3–5 minute demo proves Field-Kit is **not a chat app** by showing (1) **persistent objects with stable IDs** (Episode, Items, Bonds), (2) **lineage** (inputs → Bond → output Item) via two Bond executions, (3) **Holologue** as a topology-aware **many→one artifact** generator, and (4) **Ledger inspection** of an append-only QDPIEvent trail with deterministic ordering.
+This 3–5 minute demo proves Field-Kit is **not a chat app** by showing (1) **Queue Lattice Mode** (minting Queue Items and connecting them via hololoops), (2) **persistent objects with stable IDs** (Episode, Items, Bonds), (3) **lineage** (inputs → Bond → output Item) via two Bond executions, (4) **Holologue** as a topology-aware **many→one artifact** generator, and (5) **Ledger inspection** of an append-only QDPIEvent trail with deterministic ordering.
 
 ### Terms (v0.1)
 
@@ -135,33 +135,46 @@ Credits are included in this demo only to prove that “economic/game layer is e
 
 ---
 
-### Step 3 — Create Item 1 (Q)
+### Step 3 — Create Queue Item 1 (Q)
 
 | Field                                  | Spec                                                                                                                                                                                                                                     |
 | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Step name**                          | Create Item 1 (Q)                                                                                                                                                                                                                        |
-| **User action (exact labels)**         | Tap **“Create Item”** (or **“+ New Item”**) → in the sheet tap **“Create Item”** (accept defaults).                                                                                                                                      |
-| **System action**                      | Persist Item type `Q` titled **“My First Field Item”**. (Credits simulation) award +1 for item creation.                                                                                                                                 |
+| **Step name**                          | Create Queue Item 1 (Q)                                                                                                                                                                                                                        |
+| **User action (exact labels)**         | Tap **"Create Item"** (or **"+ New Item"**) → in the sheet tap **"Create Item"** (accept defaults). No dropdown for Q/M/D/H.                                                                                                                                      |
+| **System action**                      | Persist Item type `Q` (Queue) titled **"My First Field Item"**. (Credits simulation) award +1 for item creation.                                                                                                                                 |
 | **Objects affected (expected counts)** | **Items:** 1 (Q) • **Bonds:** 0 • **Episodes:** 1 • **QDPIEvents:** +3 (min)                                                                                                                                                             |
 | **Required QDPIEvents appended**       | - `item.created` (**M**, `direction:"user→field"`)  <br>- `credits.delta` (**Q**, `direction:"system→field"`, `reason:"item_created"`, `delta:+1`, optional `item_id:"it_…"` )  <br>- `store.commit` (**Q**, `direction:"system→field"`) |
-| **Visible UI proof**                   | Toast: **`Saved ✓ Item it_… · View Ledger`**. Item appears on canvas with title **“My First Field Item”**. Credits chip updates: **Credits: 100 → 101**.                                                                                 |
+| **Visible UI proof**                   | Toast: **`Saved ✓ Item it_… · View Ledger`**. Queue Item appears on canvas with title **"My First Field Item"**. Credits chip updates: **Credits: 100 → 101**.                                                                                 |
 
 ---
 
-### Step 4 — Create Item 2 (Q)
+### Step 4 — Create Queue Item 2 (Q) and select hololoop
 
 | Field                                  | Spec                                                                                                                                                                                                                                     |
 | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Step name**                          | Create Item 2 (Q)                                                                                                                                                                                                                        |
-| **User action (exact labels)**         | Tap **“Create Item”** (or **“+ New Item”**) → set **Type: Q** (if a type picker exists) → tap **“Create Item”**.                                                                                                                         |
-| **System action**                      | Persist second Item type `Q` (e.g., “Second Field Item”). (Credits simulation) award +1 for item creation.                                                                                                                               |
-| **Objects affected (expected counts)** | **Items:** 2 (Q,Q) • **Bonds:** 0 • **QDPIEvents:** +3 (min)                                                                                                                                                                             |
-| **Required QDPIEvents appended**       | - `item.created` (**M**, `direction:"user→field"`)  <br>- `credits.delta` (**Q**, `direction:"system→field"`, `reason:"item_created"`, `delta:+1`, optional `item_id:"it_…"` )  <br>- `store.commit` (**Q**, `direction:"system→field"`) |
-| **Visible UI proof**                   | Toast: **`Saved ✓ Item it_… · View Ledger`**. Two Items visible on canvas. Credits chip updates: **Credits: 101 → 102**.                                                                                                                 |
+| **Step name**                          | Create Queue Item 2 (Q) and connect via hololoop                                                                                                                                                                                                                        |
+| **User action (exact labels)**         | Tap **"Create Item"** (or **"+ New Item"**) → tap **"Create Item"** → System presents 4 hololoop options → User selects exactly 1.                                                                                                                         |
+| **System action**                      | Persist second Queue Item type `Q`. Choose target Queue (default: previous Queue). Generate 4 hololoop options (content-derived hololinks). On selection, persist link-only Bond. (Credits simulation) award +1 for item creation.                                                                                                                               |
+| **Objects affected (expected counts)** | **Items:** 2 (Q,Q) • **Bonds:** 1 (link-only hololoop) • **QDPIEvents:** +4 (min)                                                                                                                                                                             |
+| **Required QDPIEvents appended**       | - `item.created` (**M**, `direction:"user→field"`)  <br>- `bond.suggestions.presented` (**Q**, `direction:"system→field"`, `mode:"queue_lattice"`)  <br>- `bond.draft_created` (**D**, `direction:"user→field"`)  <br>- `credits.delta` (**Q**, `direction:"system→field"`, `reason:"item_created"`, `delta:+1`)  <br>- `store.commit` (**Q**, `direction:"system→field"`) |
+| **Visible UI proof**                   | Toast: **`Saved ✓ Item it_… · 2 Queue Items`**. Two Queue Items visible; one link-only Bond connects them. Hololoop options are readable (no ellipses). Credits chip updates: **Credits: 101 → 102**.                                                                                                                 |
 
 ---
 
-### Step 5 — Suggested Bond prompts appear (events only)
+### Step 5 — Create Queue Items 3 and 4 (complete lattice)
+
+| Field                                  | Spec                                                                                                                                                                                                                                     |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Step name**                          | Complete Queue Lattice (Q3, Q4 + hololoops)                                                                                                                                                                                                                        |
+| **User action (exact labels)**         | Create Q3 → select hololoop → Create Q4 → select hololoop.                                                                                                                                                                                                                        |
+| **System action**                      | Same flow as Step 4 for Q3 and Q4. After Q4 hololoop, check `queue_count >= 4` → unlock operators (Q→M, Q→D, Holologue).                                                                                                                                                                                                                        |
+| **Objects affected (expected counts)** | **Items:** 4 (Q,Q,Q,Q) • **Bonds:** 3 (link-only hololoops) • **QDPIEvents:** +8 (min)                                                                                                                                                                                                                        |
+| **Required QDPIEvents appended**       | - `item.created` (Q3, Q4)  <br>- `bond.suggestions.presented` (hololoop options for Q3, Q4)  <br>- `bond.draft_created` (hololoop selections)  <br>- `credits.delta` (+1 each)  <br>- `store.commit`                                                                                                                                                                                                                        |
+| **Visible UI proof**                   | Toast: **`Saved ✓ Queue Lattice ready (4 Items) · Operators unlocked`**. Four Queue Items connected via hololoops. Operator buttons enabled.                                                                                                                 |
+
+---
+
+### Step 6 — Suggested Bond prompts appear (events only)
 
 | Field                                  | Spec                                                                                                                                 |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -174,7 +187,7 @@ Credits are included in this demo only to prove that “economic/game layer is e
 
 ---
 
-### Step 6 — Select 1 suggestion → Create Bond draft → Run Bond → output Item M (lineage)
+### Step 7 — Select 1 suggestion → Create Bond draft → Run Bond → output Item M (lineage)
 
 | Field                                  | Spec                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -188,14 +201,14 @@ Credits are included in this demo only to prove that “economic/game layer is e
 
 ---
 
-### Step 7 — Write a Bond prompt → Create Bond draft → Run Bond → output Item D (lineage)
+### Step 8 — Write a Bond prompt → Create Bond draft → Run Bond → output Item D (lineage)
 
 | Field                                  | Spec                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Step name**                          | Q→D via user-written Bond execution                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | **User action (exact labels)**         | Tap **“New Bond”** (or **“Create Bond”**) → enter prompt text → tap **“Create Bond”** → tap **“Run Bond”**.                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | **System action**                      | Create Bond draft with `status:"draft"`, `output_item_id:null`, and `prompt_text` written by user → execute → create output Item type `D` → update Bond to `status:"executed"` (`output_item_id` set) → commit. (Credits simulation) spend on run request, reward on success.                                                                                                                                                                                                                                                           |
-| **Objects affected (expected counts)** | **Items:** 4 (Q,Q,M,D) • **Bonds:** 2 (both executed) • **QDPIEvents:** +6 (min)                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| **Objects affected (expected counts)** | **Items:** 6 (Q,Q,Q,Q,M,D) • **Bonds:** 5 (3 hololoops + 2 operator bonds) • **QDPIEvents:** +6 (min)                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | **Required QDPIEvents appended**       | - `bond.draft_created` (**D**, `direction:"user→field"`)  <br>- `bond.run_requested` (**Q**, `direction:"user→field"`)  <br>- `credits.delta` (**Q**, `direction:"system→field"`, `reason:"bond_run_spend"`, `delta:-10`, optional `bond_id:"bd_…"` )  <br>- `bond.executed` (**M**, `direction:"system→field"`)  <br>- `credits.delta` (**Q**, `direction:"system→field"`, `reason:"bond_executed_reward"`, `delta:+3`, optional `bond_id:"bd_…"`, `output_item_id:"it_…"` )  <br>- `store.commit` (**Q**, `direction:"system→field"`) |
 | **Visible UI proof**                   | Toast: **`Saved ✓ Bond bd_… executed → Generated Item it_… · View Ledger`**. New Item (type **D**) appears. Ledger shows its provenance `created_by:"bond"`. Credits chip updates: **Credits: 95 → 85 → 88**.                                                                                                                                                                                                                                                                                                                           |
 | **Note**                               | `bond.executed` is tagged Monologue (`qdpi:"M"`) because it is a system output event; the output Item’s type may be `D` when the bond prompt was user-written. If the run fails, expect a `credits.delta` refund (`reason:"bond_run_refund"`, `delta:+10`).                                                                                                                                                                                                                                                                             |
@@ -208,34 +221,34 @@ Write a short decision note (5 bullets) that makes one clear choice based on Ite
 
 ---
 
-### Step 8 — Select constellation (2+ items) → Run Holologue → output Item H (many→one artifact)
+### Step 9 — Select constellation (2+ items) → Run Holologue → output Item H (many→one artifact)
 
 | Field                                  | Spec                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Step name**                          | (Q,Q)→H Holologue artifact creation                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | **User action (exact labels)**         | Multi-select **Item 1 (Q)** + **Item 2 (Q)** (optionally include M/D outputs) → tap **“Run Holologue”** → choose **Artifact kind: “Plan”** → tap **“Run”**.                                                                                                                                                                                                                                                                                                                    |
 | **System action**                      | Validate selection (≥2, same network/episode) → generate artifact → pass quality gate (or regenerate once) → persist **one** output Item type `H` with provenance → commit → log completion. (Credits simulation) spend on run request, reward on success.                                                                                                                                                                                                                     |
-| **Objects affected (expected counts)** | **Items:** 5 (Q,Q,M,D,H) • **Bonds:** 2 (executed) • **QDPIEvents:** +5 (min)                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **Objects affected (expected counts)** | **Items:** 7 (Q,Q,Q,Q,M,D,H) • **Bonds:** 5 (3 hololoops + 2 operator bonds) • **QDPIEvents:** +5 (min)                                                                                                                                                                                                                                                                                                                                                                                                  |
 | **Required QDPIEvents appended**       | - `holologue.run_requested` (**H**, `direction:"user→field"`)  <br>- `credits.delta` (**Q**, `direction:"system→field"`, `reason:"holologue_run_spend"`, `delta:-20`, optional `event_id:"ev_…"` )  <br>- `holologue.completed` (**H**, `direction:"system→field"`)  <br>- `credits.delta` (**Q**, `direction:"system→field"`, `reason:"holologue_completed_reward"`, `delta:+5`, optional `output_item_id:"it_…"` )  <br>- `store.commit` (**Q**, `direction:"system→field"`) |
 | **Visible UI proof**                   | Toast: **`Saved ✓ Holologue created Item it_… · View Ledger`**. New Item type **H** appears labeled as Holologue output (“from N items”). Credits chip updates: **Credits: 88 → 68 → 73**.                                                                                                                                                                                                                                                                                     |
 | **Note**                               | If Holologue fails (`holologue.failed`), expect a `credits.delta` refund (`reason:"holologue_run_refund"`, `delta:+20`) returning Credits to the pre-spend balance.                                                                                                                                                                                                                                                                                                            |
 
 ---
 
-### Step 9 — Holologue emits 4 proposals (events only)
+### Step 10 — Holologue emits 4 proposals (events only)
 
 | Field                                  | Spec                                                                                                                                    |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | **Step name**                          | Holologue proposals presented (events only)                                                                                             |
 | **User action (exact labels)**         | Do nothing (or tap the new H item to focus).                                                                                            |
 | **System action**                      | After successful completion, emit 4 Bond prompt proposals (events only).                                                                |
-| **Objects affected (expected counts)** | **Items:** 5 • **Bonds:** 2 • **QDPIEvents:** +1 (min)                                                                                  |
+| **Objects affected (expected counts)** | **Items:** 7 • **Bonds:** 5 • **QDPIEvents:** +1 (min)                                                                                  |
 | **Required QDPIEvents appended**       | - `bond.proposals.presented` (**Q**, `direction:"system→field"`)                                                                        |
 | **Visible UI proof**                   | A proposals panel shows **4 prompts** (actions: **Create Bond**, **Edit**, **Dismiss**). No Bonds are created unless the user confirms. |
 
 ---
 
-### Step 10 — Open Ledger → inspect Objects + Events → verify lineage chain + event ordering (and credits)
+### Step 11 — Open Ledger → inspect Objects + Events → verify lineage chain + event ordering (and credits)
 
 | Field                                          | Spec                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -244,8 +257,8 @@ Write a short decision note (5 bullets) that makes one clear choice based on Ite
 | **System action**                              | Render ledger view. Append inspection event.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | **Objects affected (expected counts)**         | **QDPIEvents:** +1 (min)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | **Required QDPIEvents appended**               | - `ledger.opened` (**Q**, `direction:"user→field"`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| **Visible UI proof**                           | Ledger shows: <br>**Objects:** Items (5), Bonds (2), Episodes (1), Networks (1). <br>**Events:** ordered by `(episode_id, seq)` showing the full trail (including `credits.delta`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| **Ledger verification checklist (do exactly)** | - In **Objects → Bonds**, open an executed Bond → verify `status:"executed"`, `input_item_ids`, `prompt_text`, `output_item_id`. <br>- In **Objects → Items**, open the Bond output Item (M or D) → verify `provenance.created_by:"bond"` and `provenance.bond_id` matches the Bond, and `provenance.input_item_ids` matches. <br>- In **Objects → Items**, open the Holologue output Item (H) → verify `provenance.created_by:"holologue"`, `provenance.holologue_event_id`, `provenance.selected_item_ids` (≥2), `provenance.artifact_kind`. <br>- In **Events**, verify ordering: `bond.run_requested` occurs before `bond.executed`; `holologue.run_requested` occurs before `holologue.completed`; `bond.proposals.presented` occurs after `holologue.completed`. <br>- In **Events**, find `credits.delta` and confirm `balance_after` changes match the step-by-step Credit chip transitions (seed, item_created, spends, rewards; and refunds if any failure occurred). |
+| **Visible UI proof**                           | Ledger shows: <br>**Objects:** Items (7: 4 Queue + 3 operator outputs), Bonds (5: 3 hololoops + 2 operator bonds), Episodes (1), Networks (1). <br>**Events:** ordered by `(episode_id, seq)` showing the full trail (including `credits.delta`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **Ledger verification checklist (do exactly)** | - In **Objects → Bonds**, open a link-only hololoop Bond → verify `bond_kind:"link"`, `status:"draft"`, `link_text_forward`, `link_text_return`, `input_item_ids` (2 Queue Items), `output_item_id:null`. <br>- In **Objects → Bonds**, open an executed operator Bond → verify `bond_kind:"operator"`, `status:"executed"`, `input_item_ids`, `prompt_text`, `output_item_id`. <br>- In **Objects → Items**, open the Bond output Item (M or D) → verify `provenance.created_by:"bond"` and `provenance.bond_id` matches the Bond, and `provenance.input_item_ids` matches. Verify M/D anchor back to Queue via provenance. <br>- In **Objects → Items**, open the Holologue output Item (H) → verify `provenance.created_by:"holologue"`, `provenance.holologue_event_id`, `provenance.selected_item_ids` (≥2, includes at least one Queue), `provenance.artifact_kind`. <br>- In **Events**, verify ordering: `bond.suggestions.presented` (hololoop options) occurs before `bond.draft_created`; `bond.run_requested` occurs before `bond.executed`; `holologue.run_requested` occurs before `holologue.completed`; `bond.proposals.presented` occurs after `holologue.completed`. <br>- In **Events**, find `credits.delta` and confirm `balance_after` changes match the step-by-step Credit chip transitions (seed, item_created, spends, rewards; and refunds if any failure occurred). |
 
 **Success-path minimum events you must be able to find in Ledger:**
 
@@ -290,15 +303,16 @@ holologue.failed
 
 ### Minimum counts at end of demo
 
-* **Items:** **5** minimum
+* **Items:** **6** minimum
 
-  * Types: **Q, Q, M, D, H**
-* **Bonds:** **2** minimum
+  * Types: **Q, Q, Q, Q, M, D, H** (4 Queue Items + 3 operator outputs)
+* **Bonds:** **5** minimum
 
-  * Both **executed** (each has `output_item_id`)
+  * **3 link-only hololoops** (Q↔Q, `status:"draft"`, never executed)
+  * **2 operator bonds executed** (each has `output_item_id`)
 * **Episodes:** **1** (Episode 0 / Session 0)
 * **Networks:** **1**
-* **QDPIEvents:** minimum **~29–35** on the success path
+* **QDPIEvents:** minimum **~40–50** on the success path
   This estimate **excludes** debug render/paint/layout events and **excludes** failure-only events (which should not occur on the golden path).
   Must include at least one instance of each of:
 
@@ -306,11 +320,11 @@ holologue.failed
   * `episode.created`
   * `credits.delta` (multiple; seed + actions)
   * `tutorial.started`
-  * `item.created` (≥2)
-  * `bond.suggestions.presented` (≥1)
-  * `bond.draft_created` (≥2)
-  * `bond.run_requested` (≥2)
-  * `bond.executed` (≥2)
+  * `item.created` (≥4 Queue Items)
+  * `bond.suggestions.presented` (≥3 hololoop options + ≥1 operator suggestions)
+  * `bond.draft_created` (≥3 hololoops + ≥2 operator bonds)
+  * `bond.run_requested` (≥2 operator bonds)
+  * `bond.executed` (≥2 operator bonds)
   * `holologue.run_requested` (≥1)
   * `holologue.completed` (≥1)
   * `bond.proposals.presented` (≥1)
@@ -322,19 +336,19 @@ holologue.failed
 Starting at 100, the step-default deltas yield:
 
 * Seed: `+100`
-* Items: `+1 +1`
-* Bond runs: `(-10 +3) + (-10 +3)`
+* Queue Items: `+1 +1 +1 +1` (4 Items)
+* Bond runs: `(-10 +3) + (-10 +3)` (2 operator bonds)
 * Holologue run: `(-20 +5)`
 
-**Expected final Credits:** `73`
+**Expected final Credits:** `75`
 (If you retry runs or create extra Items, this will differ; the Ledger’s `credits.delta` events are the source of truth.)
 
 ### What the Ledger must show
 
 * **Objects tab**
 
-  * Items list includes 5 Items with stable IDs and types (Q/Q/M/D/H)
-  * Bonds list includes 2 Bonds with `status:"executed"` and valid `output_item_id`
+  * Items list includes 7 Items with stable IDs and types (Q/Q/Q/Q/M/D/H)
+  * Bonds list includes 5 Bonds: 3 link-only hololoops (`status:"draft"`, never executed) and 2 operator bonds (`status:"executed"` with valid `output_item_id`)
   * Episode 0 exists and is linked by `episode_id`
   * Network exists and is required on all objects
 * **Events tab**
@@ -389,10 +403,15 @@ Starting at 100, the step-default deltas yield:
   * [ ] `episode.created` (qdpi `Q`, `direction:"system→field"`)
   * [ ] `store.commit` (qdpi `Q`, `direction:"system→field"`)
   * [ ] (Credits simulation) `credits.delta` seed +100 (qdpi `Q`, `direction:"system→field"`)
-* [ ] Creating Item 1 and Item 2 appends `item.created` + `store.commit` each and shows `Saved ✓ Item it_…`.
+* [ ] Creating Queue Items 1–4 appends `item.created` + `store.commit` each and shows `Saved ✓ Item it_…`.
 
   * [ ] (Credits simulation) each Item creation appends `credits.delta` `delta:+1` with `reason:"item_created"` and the Credits chip updates accordingly.
-* [ ] Suggestions appear as **events only**: `bond.suggestions.presented` (no Bond object created yet).
+* [ ] Queue Lattice Mode is demonstrated:
+
+  * [ ] After Q2 creation, system presents 4 hololoop options (`bond.suggestions.presented` with `mode:"queue_lattice"`).
+  * [ ] User selects exactly 1 → persists link-only Bond (`bond.draft_created`).
+  * [ ] After Q4 hololoop, operators unlock (Q→M, Q→D, Holologue).
+* [ ] Operator bond suggestions appear as **events only**: `bond.suggestions.presented` (no Bond object created yet).
 * [ ] Suggested Bond path produces:
 
   * [ ] Bond draft (`bond.draft_created`)

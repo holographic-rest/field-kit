@@ -1,0 +1,20 @@
+{
+  "name": "q_governance_metrics_v1",
+  "description": "Queue-stage test for governance metrics (S06). Validates that complexity metrics are computed and governance actions are suggested.",
+  "qdpi_stage": "Q",
+  "seed": {
+    "type": "golden_flow"
+  },
+  "subject_item_id": "dynamic:0",
+  "k": 4,
+  "acceptable_targets": {
+    "type": "suggestion_indices",
+    "values": [1, 2, 3, 4]
+  },
+  "expected_governance": {
+    "metrics_computable": true,
+    "action_suggested": true,
+    "notes": "S06: Governance should compute complexity metrics (apparent_complexity, hubness, duplicate_rate) and suggest one of {bundle, prune, branch, continue}."
+  },
+  "notes": "This test validates S06 governance infrastructure. For the golden flow (minimal data), the governor should typically suggest 'continue' due to small field size."
+}

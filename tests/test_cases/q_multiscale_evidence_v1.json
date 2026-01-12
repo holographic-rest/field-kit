@@ -1,0 +1,20 @@
+{
+  "name": "q_multiscale_evidence_v1",
+  "description": "Queue-stage test for multi-scale evidence coverage (S04). Tests that suggestions can include evidence from multiple scales.",
+  "qdpi_stage": "Q",
+  "seed": {
+    "type": "golden_flow"
+  },
+  "subject_item_id": "dynamic:0",
+  "k": 4,
+  "acceptable_targets": {
+    "type": "suggestion_indices",
+    "values": [1, 2, 3, 4]
+  },
+  "expected_evidence": {
+    "min_with_evidence": 1,
+    "min_scales_present": 1,
+    "notes": "S04: Multi-scale evidence is best-effort. At minimum, local scale should be present."
+  },
+  "notes": "This test validates S04 multi-scale context. Evidence should include scale and dilation_offset metadata. Multiple scales are best-effort but local should always be present."
+}

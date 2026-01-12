@@ -456,6 +456,69 @@ class EventLogger:
             refs=refs,
         )
 
+    # === S03: Pointer-based navigation events ===
+
+    def hololink_candidates_generated(
+        self,
+        network_id: str,
+        episode_id: str,
+        subject_item_id: str,
+        candidate_ids: List[str],
+        has_evidence_count: int,
+        total_candidates: int = 4,
+    ) -> QDPIEvent:
+        """
+        Log hololink.candidates_generated event.
+
+        Fired when the pointer scorer generates a set of navigation candidates.
+        """
+        return self.log_event(
+            network_id=network_id,
+            episode_id=episode_id,
+            name="hololink.candidates_generated",
+            qdpi="Q",
+            direction="system→field",
+            refs={
+                "subject_item_id": subject_item_id,
+                "candidate_ids": candidate_ids,
+                "has_evidence_count": has_evidence_count,
+                "total_candidates": total_candidates,
+            },
+        )
+
+    def hololink_pointer_selected(
+        self,
+        network_id: str,
+        episode_id: str,
+        subject_item_id: str,
+        chosen_candidate_id: str,
+        chosen_target_id: Optional[str],
+        probability: float,
+        top_evidence_shard_ids: List[str],
+    ) -> QDPIEvent:
+        """
+        Log hololink.pointer_selected event.
+
+        Fired when a user selects a navigation candidate.
+        """
+        refs = {
+            "subject_item_id": subject_item_id,
+            "chosen_candidate_id": chosen_candidate_id,
+            "probability": probability,
+            "top_evidence_shard_ids": top_evidence_shard_ids,
+        }
+        if chosen_target_id:
+            refs["chosen_target_id"] = chosen_target_id
+
+        return self.log_event(
+            network_id=network_id,
+            episode_id=episode_id,
+            name="hololink.pointer_selected",
+            qdpi="Q",
+            direction="user→field",
+            refs=refs,
+        )
+
 
 # Singleton logger
 _default_logger: Optional[EventLogger] = None

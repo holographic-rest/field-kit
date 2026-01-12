@@ -49,6 +49,29 @@ DOMAIN_ENTITIES = {
     "infrastructure", "architecture", "stack", "layer",
 }
 
+# === Full noun phrase patterns to preserve (high priority) ===
+# These should NOT be truncated - extract complete phrases
+FULL_PHRASE_PATTERNS = [
+    r"One Thousand and One Nights",
+    r"Scheherazade in reverse",
+    r"identity of [Tt]he [A-Z][a-z]+",
+    r"The [A-Z][a-z]+ [A-Z][a-z]+",  # The Big Sleep, The Author Mystery
+    r"[A-Z][a-z]+ [A-Z][a-z]+ in [a-z]+",  # X Y in reverse/context
+    r"found text",
+    r"giallo",
+    r"Magical Dominion",
+    r"collector and curator",
+]
+
+# === First-person claim patterns (trigger WH-question frames) ===
+FIRST_PERSON_PATTERNS = [
+    r"I didn't write this",
+    r"I do not know the identity",
+    r"I don't know",
+    r"I am not",
+    r"I cannot",
+]
+
 
 def _word_count(text: str) -> int:
     """Count words in text."""
@@ -225,6 +248,21 @@ def extract_handles(text: str, title: Optional[str] = None) -> List[Dict[str, An
         normalized_title = normalize_for_anchor(title)
         if normalized_title and len(normalized_title) >= 4:
             add_handle(normalized_title, "heading", 0.98, "title", 0, "title_normalized")
+
+    # === 1.5. Extract FULL NOUN PHRASES (highest priority, no truncation) ===
+    # These are important literary/thematic phrases that must be preserved whole
+    for pattern in FULL_PHRASE_PATTERNS:
+        for match in re.finditer(pattern, full_text, re.IGNORECASE):
+            phrase = match.group(0).strip()
+            if 4 <= len(phrase) <= 60:
+                add_handle(phrase, "entity", 0.96, "body", 0, "full_phrase_pattern")
+
+    # === 1.6. Extract first-person claim phrases (for WH-question triggers) ===
+    for pattern in FIRST_PERSON_PATTERNS:
+        for match in re.finditer(pattern, full_text, re.IGNORECASE):
+            phrase = match.group(0).strip()
+            if 4 <= len(phrase) <= 40:
+                add_handle(phrase, "phrase", 0.92, "body", 0, "first_person_claim")
 
     # === 2. Named entities - CRITICAL for literary/creative content ===
     # Look for capitalized phrases: The Author, Scheherazade, Giallo, Magical Dominion

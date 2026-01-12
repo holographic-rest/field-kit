@@ -1,0 +1,201 @@
+
+[--fresh] Archiving existing data...
+No existing JSONL files to archive.
+
+======================================================================
+FIELD-KIT v0.1 — DEMO GOLDEN FLOW
+======================================================================
+
+──────────────────────────────────────────────────────────────────────
+STEP 1: Launch → Episode 0 created → Blank Field visible
+──────────────────────────────────────────────────────────────────────
+Store initialized.
+  Network: nw_DB440245FA6547E7AF78807C
+  Episode: ep_3B84F2205C6043DC90A25FD1 (Session 0)
+  Credits: 100
+✓ Episode created: ep_3B84F2205C6043DC90A25FD1
+✓ Credits: 100
+
+──────────────────────────────────────────────────────────────────────
+STEP 2: Start Guided Tutorial
+──────────────────────────────────────────────────────────────────────
+Tutorial started.
+✓ Tutorial started
+
+──────────────────────────────────────────────────────────────────────
+STEP 3: Create Item 1 (Q)
+──────────────────────────────────────────────────────────────────────
+Item created: it_DDFC87C3CB654D23937A0673
+  Type: Q
+  Title: My First Field Item
+  Credits: 101
+✓ Item 1: it_DDFC87C3CB654D23937A0673
+✓ Credits: 101
+
+──────────────────────────────────────────────────────────────────────
+STEP 4: Create Item 2 (Q)
+──────────────────────────────────────────────────────────────────────
+Item created: it_0767326838454691BDE8F8D3
+  Type: Q
+  Title: Second Field Item
+  Credits: 102
+✓ Item 2: it_0767326838454691BDE8F8D3
+✓ Credits: 102
+
+──────────────────────────────────────────────────────────────────────
+STEP 5: Suggested Bond prompts appear (events only)
+──────────────────────────────────────────────────────────────────────
+Suggestions presented for item it_DDFC87C3CB654D23937A0673:
+  1. [clarify_to_testable_claim] Pin down the meaning of "My First Field Item" using observable behaviors.
+  2. [ground_in_experiment] Turn "Item" into a 6-step implementation checklist.
+  3. [architecture_map] Where does "My First Field Item" fit in the overall data flow?
+  4. [adversarial_test_cases] Turn "My First Field Item" into a 6-step implementation checklist.
+✓ 4 suggestions presented (events-only)
+✓ No Bond created
+
+──────────────────────────────────────────────────────────────────────
+STEP 6: Q→M via suggested Bond execution
+──────────────────────────────────────────────────────────────────────
+Bond draft created: bd_8D88EB1979A64358A98EA07F
+  Inputs: ['it_DDFC87C3CB654D23937A0673']
+  Prompt: Pin down the meaning of "My First Field Item" using observable behaviors.
+Bond executed: bd_8D88EB1979A64358A98EA07F
+  Output Item: it_740FA2A3F1BE49B7B6F52512 (type=M)
+  Credits: 95
+✓ Bond 1: bd_8D88EB1979A64358A98EA07F
+✓ Output M: it_740FA2A3F1BE49B7B6F52512
+✓ Credits: 95
+
+──────────────────────────────────────────────────────────────────────
+STEP 7: Q→D via user-written Bond execution
+──────────────────────────────────────────────────────────────────────
+Bond draft created: bd_559E50367EF242E1ABAD2417
+  Inputs: ['it_0767326838454691BDE8F8D3']
+  Prompt: Write a short decision note (5 bullets) that makes one clear choice based on Item 1.
+Bond executed: bd_559E50367EF242E1ABAD2417
+  Output Item: it_F92244B484A24B018BF406E7 (type=D)
+  Credits: 88
+✓ Bond 2: bd_559E50367EF242E1ABAD2417
+✓ Output D: it_F92244B484A24B018BF406E7
+✓ Credits: 88
+
+──────────────────────────────────────────────────────────────────────
+STEP 8: (Q,Q)→H Holologue artifact creation
+──────────────────────────────────────────────────────────────────────
+Holologue completed: it_ADD72FA18DB140B594E166A9
+  Artifact kind: plan
+  Selected items: 2
+  Credits: 73
+  Proposals presented (events-only):
+    1. [clarify_to_testable_claim] Define "Holologue: plan (2 items)" with 3 concrete...
+    2. [architecture_map] Show where "Key Themes" fits in the architecture w...
+    3. [interaction_trace] Trace how "Action Items" flows through the system ...
+    4. [spec_fragment_rules] Give 3 test cases that validate "Synthesis Plan" w...
+✓ Output H: it_ADD72FA18DB140B594E166A9
+✓ Credits: 73
+
+──────────────────────────────────────────────────────────────────────
+STEP 9: Holologue proposals presented (events only)
+──────────────────────────────────────────────────────────────────────
+✓ 4 proposals presented (events-only)
+
+──────────────────────────────────────────────────────────────────────
+STEP 10: Ledger inspection (Queue/Inspect)
+──────────────────────────────────────────────────────────────────────
+============================================================
+LEDGER VIEW
+============================================================
+
+--- Objects ---
+Networks: 1
+Episodes: 1
+Items: 5
+  - it_DDFC87C3CB654D23937A0673: type=Q, title=My First Field Item...
+  - it_0767326838454691BDE8F8D3: type=Q, title=Second Field Item...
+  - it_740FA2A3F1BE49B7B6F52512: type=M, title=M: My First Field Item...
+  - it_F92244B484A24B018BF406E7: type=D, title=D: Second Field Item...
+  - it_ADD72FA18DB140B594E166A9: type=H, title=Holologue: plan (2 items)...
+Bonds: 2
+  - bd_8D88EB1979A64358A98EA07F: status=executed, output_item_id=it_740FA2A3F1BE49B7B6F52512
+  - bd_559E50367EF242E1ABAD2417: status=executed, output_item_id=it_F92244B484A24B018BF406E7
+
+--- Events ---
+Total events: 33
+    1. app.first_run.started          (qdpi=Q, dir=system→field)
+    2. episode.created                (qdpi=Q, dir=system→field)
+    3. credits.delta                  (qdpi=Q, dir=system→field)
+    4. store.commit                   (qdpi=Q, dir=system→field)
+    5. tutorial.started               (qdpi=Q, dir=user→field)
+    6. item.created                   (qdpi=M, dir=user→field)
+    7. credits.delta                  (qdpi=Q, dir=system→field)
+    8. store.commit                   (qdpi=Q, dir=system→field)
+    9. item.created                   (qdpi=M, dir=user→field)
+   10. credits.delta                  (qdpi=Q, dir=system→field)
+   11. store.commit                   (qdpi=Q, dir=system→field)
+   12. bond.suggestions.presented     (qdpi=Q, dir=system→field)
+   13. bond.draft_created             (qdpi=D, dir=user→field)
+   14. store.commit                   (qdpi=Q, dir=system→field)
+   15. bond.run_requested             (qdpi=Q, dir=user→field)
+   16. credits.delta                  (qdpi=Q, dir=system→field)
+   17. bond.executed                  (qdpi=M, dir=system→field)
+   18. credits.delta                  (qdpi=Q, dir=system→field)
+   19. store.commit                   (qdpi=Q, dir=system→field)
+   20. bond.draft_created             (qdpi=D, dir=user→field)
+   21. store.commit                   (qdpi=Q, dir=system→field)
+   22. bond.run_requested             (qdpi=Q, dir=user→field)
+   23. credits.delta                  (qdpi=Q, dir=system→field)
+   24. bond.executed                  (qdpi=M, dir=system→field)
+   25. credits.delta                  (qdpi=Q, dir=system→field)
+   26. store.commit                   (qdpi=Q, dir=system→field)
+   27. holologue.run_requested        (qdpi=H, dir=user→field)
+   28. credits.delta                  (qdpi=Q, dir=system→field)
+   29. holologue.completed            (qdpi=H, dir=system→field)
+   30. credits.delta                  (qdpi=Q, dir=system→field)
+   31. bond.proposals.presented       (qdpi=Q, dir=system→field)
+   32. store.commit                   (qdpi=Q, dir=system→field)
+   33. ledger.opened                  (qdpi=Q, dir=user→field)
+
+--- Credits ---
+Credits events: 9
+  seq=3: delta=+100, balance=100, reason=seed
+  seq=7: delta=+1, balance=101, reason=item_created
+  seq=10: delta=+1, balance=102, reason=item_created
+  seq=16: delta=-10, balance=92, reason=bond_run_spend
+  seq=18: delta=+3, balance=95, reason=bond_executed_reward
+  seq=23: delta=-10, balance=85, reason=bond_run_spend
+  seq=25: delta=+3, balance=88, reason=bond_executed_reward
+  seq=28: delta=-20, balance=68, reason=holologue_run_spend
+  seq=30: delta=+5, balance=73, reason=holologue_completed_reward
+
+Final Credits Balance: 73
+============================================================
+
+======================================================================
+FINAL ASSERTIONS
+======================================================================
+✓ Items: 5 (types: ['D', 'H', 'M', 'Q', 'Q'])
+✓ Bonds: 2 (both executed)
+✓ Event ordering: bond.run_requested < bond.executed
+✓ Event ordering: holologue.run_requested < holologue.completed
+✓ Event ordering: holologue.completed < bond.proposals.presented
+✓ Credits: 73 (matches expected 73)
+
+--- Success-path events found ---
+  ✓ app.first_run.started (1x)
+  ✓ episode.created (1x)
+  ✓ credits.delta (9x)
+  ✓ tutorial.started (1x)
+  ✓ item.created (2x)
+  ✓ bond.suggestions.presented (1x)
+  ✓ bond.draft_created (2x)
+  ✓ bond.run_requested (2x)
+  ✓ bond.executed (2x)
+  ✓ holologue.run_requested (1x)
+  ✓ holologue.completed (1x)
+  ✓ bond.proposals.presented (1x)
+  ✓ ledger.opened (1x)
+  ✓ store.commit (8x)
+
+======================================================================
+GOLDEN FLOW COMPLETE — ALL ASSERTIONS PASSED!
+======================================================================

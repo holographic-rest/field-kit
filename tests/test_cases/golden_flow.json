@@ -1,0 +1,19 @@
+{
+  "name": "q_golden_flow_v1",
+  "description": "Queue-stage suggestions after golden flow creates 2 items. Baseline test case that must always pass.",
+  "qdpi_stage": "Q",
+  "seed": {
+    "type": "golden_flow"
+  },
+  "subject_item_id": "dynamic:0",
+  "k": 4,
+  "acceptable_targets": {
+    "type": "suggestion_indices",
+    "values": [1, 2, 3, 4]
+  },
+  "expected_evidence": {
+    "min_with_evidence": 0,
+    "notes": "Current system does not produce evidence shards"
+  },
+  "notes": "This is the primary regression test. All 4 suggestions are considered acceptable as they come from the Spin Recipes system."
+}

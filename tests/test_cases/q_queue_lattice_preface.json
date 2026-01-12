@@ -1,0 +1,19 @@
+{
+  "name": "q_synthetic_top1_only",
+  "description": "Queue-stage where only the top-1 suggestion is considered acceptable",
+  "qdpi_stage": "Q",
+  "seed": {
+    "type": "golden_flow"
+  },
+  "subject_item_id": "dynamic:0",
+  "k": 4,
+  "acceptable_targets": {
+    "type": "suggestion_indices",
+    "values": [1]
+  },
+  "expected_evidence": {
+    "min_with_evidence": 0,
+    "notes": "Current system does not produce evidence shards"
+  },
+  "notes": "Tests MRR calculation when only top-1 is acceptable. Should have MRR=1.0 if top-1 matches, low recall (1/4=0.25)."
+}

@@ -21,6 +21,17 @@ Commands:
 - curated:view: View curated projection (canon)
 - export:episode: Export full Episode JSON
 - export:curated: Export curated projection JSON
+- debug:stats: Display debug stats for current episode (Sprint S01)
+- eval:regression: Run regression tests against baselines (Sprint S02)
+- eval:dashboard: Display evaluation metrics dashboard (Sprint S02)
+- govern:report: Display governance report with action suggestion (Sprint S06)
+- govern:bundle:propose: Detect and propose bundle candidates (Sprint S06)
+- govern:prune:plan: Detect prune candidates and create plan (Sprint S06)
+- migrate:jsonl-to-sqlite: Migrate JSONL data to SQLite database (Sprint S10)
+- backup:create: Create backup archive of field data (Sprint S10)
+- backup:restore: Restore data from backup archive (Sprint S10)
+- backup:verify: Verify backup archive integrity (Sprint S10)
+- backup:list: List available backups (Sprint S10)
 """
 
 import sys
@@ -62,6 +73,11 @@ from fieldkit import (
     choose_diverse_handles,
 )
 from fieldkit.handles import extract_handles
+from fieldkit.instrumentation import compute_stats_from_events, format_stats_report
+from fieldkit.suggestion_engine import generate_bond_suggestions_with_evidence
+from fieldkit.governor import ComplexityGovernor
+from fieldkit.bundling import detect_bundle_candidates, format_proposals_report
+from fieldkit.pruning import detect_and_plan, format_prune_plan_report
 
 
 class FieldKitCLI:
@@ -273,8 +289,12 @@ class FieldKitCLI:
         Uses Spin Recipes to generate exactly 4 content-shaped suggestions
         with anchor phrase from the Item title.
 
+        S03: Now includes evidence shards and pointer probabilities.
+        S04: Multi-scale context with scale and dilation_offset metadata.
+
         Events logged:
         - bond.suggestions.presented
+        - hololink.candidates_generated (S03)
         """
         self._require_init()
 
@@ -284,22 +304,62 @@ class FieldKitCLI:
             print(f"Error: Item {item_id} not found.")
             sys.exit(1)
 
-        # Generate 4 suggestions using Spin Recipes
-        suggestions = generate_suggestions_for_item(
-            item_title=item["title"],
-            item_body=item.get("body"),
-        )
+        # Generate 4 suggestions with evidence (S03: pointer-style, S04: multi-scale)
+        result = generate_bond_suggestions_with_evidence(item, data_dir=str(self.store.data_dir))
+        suggestions = result.get("suggestions", [])
+        has_evidence = result.get("has_evidence", 0)
+        scales_present = result.get("scales_present", [])
 
-        # Log event (events-only; no Bond created)
+        # Log legacy event (bond.suggestions.presented)
         self.logger.bond_suggestions_presented(
             self._network_id, self._episode_id,
             item_id=item_id, suggestions=suggestions,
         )
 
+        # Log S03 event (hololink.candidates_generated)
+        candidate_ids = [s.get("candidate_id", "") for s in suggestions]
+        self.logger.hololink_candidates_generated(
+            self._network_id, self._episode_id,
+            subject_item_id=item_id,
+            candidate_ids=candidate_ids,
+            has_evidence_count=has_evidence,
+            total_candidates=len(suggestions),
+        )
+
+        # S05: Get candidates for graph distance info
+        candidates = result.get("candidates", [])
+
         print(f"Suggestions presented for item {item_id}:")
+        if scales_present:
+            print(f"  (scales: {', '.join(sorted(scales_present))})")
+
         for i, s in enumerate(suggestions, 1):
-            recipe_id = s.get("recipe_id", "unknown")
-            print(f"  {i}. [{recipe_id}] {s['prompt_text']}")
+            intent = s.get("intent", s.get("intent_type", "unknown"))
+            prob = s.get("probability", 0)
+            prompt = s.get("prompt_text", "")[:80]
+            if len(s.get("prompt_text", "")) > 80:
+                prompt += "..."
+
+            # S05: Show graph distance if available
+            graph_dist = None
+            if i <= len(candidates):
+                graph_dist = candidates[i-1].get("graph_distance")
+
+            if graph_dist is not None and graph_dist >= 0:
+                print(f"  {i}. [{intent}] ({prob*100:.0f}%) [d={graph_dist}] {prompt}")
+            else:
+                print(f"  {i}. [{intent}] ({prob*100:.0f}%) {prompt}")
+
+            # Show evidence if present (S03/S04)
+            evidence_shards = s.get("evidence_shards", [])
+            if evidence_shards:
+                for shard in evidence_shards[:3]:  # Show up to 3 shards (S04: multi-scale)
+                    span = shard.get("text_span", "")[:50]
+                    if len(shard.get("text_span", "")) > 50:
+                        span += "..."
+                    scale = shard.get("scale", "local")
+                    offset = shard.get("dilation_offset", 0)
+                    print(f"     [{scale}@{offset}] \"{span}\"")
 
         return suggestions
 
@@ -1303,6 +1363,267 @@ class FieldKitCLI:
         print(f"Curated projection exported to: {output_path}")
         return output_path
 
+    # === Debug Commands (Sprint S01) ===
+
+    def cmd_debug_stats(self):
+        """
+        Display debug stats for the current episode.
+
+        Stats include:
+        - Event counts by type
+        - Branching factor
+        - Suggestion entropy
+        - Write rate
+        - Backtrack detection
+        - Credits trajectory
+
+        See: src/fieldkit/instrumentation.py for implementation details.
+        """
+        self._require_init()
+
+        # Load events
+        events = self.store.load_events(episode_id=self._episode_id)
+
+        if not events:
+            print("No events found. Run 'init' to create an episode.")
+            return
+
+        # Compute and format stats
+        stats = compute_stats_from_events(events)
+        report = format_stats_report(stats)
+
+        print(report)
+        return stats
+
+    # === Evaluation Commands (Sprint S02) ===
+
+    def cmd_eval_regression(self, update_baselines: bool = False):
+        """
+        Run regression tests against baselines.
+
+        Args:
+            update_baselines: If True, update baselines instead of testing
+        """
+        # Import regression suite
+        tests_path = Path(__file__).parent.parent / "tests"
+        sys.path.insert(0, str(tests_path))
+
+        from regression_suite import RegressionSuite
+
+        suite = RegressionSuite()
+
+        if update_baselines:
+            suite.update_baselines()
+            return
+
+        results, passed = suite.run_regression()
+
+        if not results:
+            print("No regression results. Run with --update-baselines first.")
+            return
+
+        print(suite.generate_report(results, passed))
+
+        if not passed:
+            sys.exit(1)
+
+    def cmd_eval_dashboard(self):
+        """
+        Display evaluation metrics dashboard.
+
+        Shows current metrics for all test cases in a compact table.
+        """
+        # Import eval harness
+        tests_path = Path(__file__).parent.parent / "tests"
+        sys.path.insert(0, str(tests_path))
+
+        from eval_harness import EvalHarness
+
+        harness = EvalHarness()
+
+        try:
+            results = harness.run_all_test_cases()
+            print(harness.generate_report(results))
+        finally:
+            harness.cleanup()
+
+    # === Governance Commands (Sprint S06) ===
+
+    def cmd_govern_report(self):
+        """
+        Display governance report with recommended action.
+
+        Analyzes complexity metrics and suggests one of:
+        - bundle: Consolidate related items
+        - prune: Archive stale/orphaned items
+        - branch: Encourage exploration
+        - continue: No action needed
+        """
+        self._require_init()
+
+        governor = ComplexityGovernor()
+        observation = governor.observe(self.store.data_dir)
+        report = governor.format_report(observation)
+
+        print(report)
+        return observation
+
+    def cmd_govern_bundle_propose(self):
+        """
+        Detect and propose bundle candidates.
+
+        Analyzes items for clustering by:
+        - Title similarity
+        - Shared bond connections
+
+        Returns proposals only - no changes are made.
+        """
+        self._require_init()
+
+        proposals = detect_bundle_candidates(self.store.data_dir)
+        report = format_proposals_report(proposals)
+
+        print(report)
+        return proposals
+
+    def cmd_govern_prune_plan(self):
+        """
+        Detect prune candidates and create plan.
+
+        Identifies candidates for archiving:
+        - Duplicates (by title prefix)
+        - Orphans (no bonds, no activity)
+        - Low-entropy (never used as evidence)
+
+        Returns plan only - no items are archived.
+        """
+        self._require_init()
+
+        plan = detect_and_plan(self.store.data_dir)
+        report = format_prune_plan_report(plan)
+
+        print(report)
+        return plan
+
+    # === Storage & Backup Commands (Sprint S10) ===
+
+    def cmd_migrate_to_sqlite(self, verbose: bool = True):
+        """
+        Migrate JSONL data to SQLite database.
+
+        Creates fieldkit.db in the data directory with all existing data.
+        FTS5 full-text search is enabled if available.
+        """
+        from fieldkit.store_sqlite import migrate_jsonl_to_sqlite
+
+        counts = migrate_jsonl_to_sqlite(
+            self.store.data_dir,
+            verbose=verbose,
+        )
+
+        if verbose:
+            print("\nMigration summary:")
+            for key, count in counts.items():
+                print(f"  {key}: {count}")
+
+        return counts
+
+    def cmd_backup_create(self, output_path: Optional[Path] = None, include_sqlite: bool = True):
+        """
+        Create a backup archive of the current data.
+
+        Args:
+            output_path: Path for backup file (default: data_dir/backup_TIMESTAMP.tar)
+            include_sqlite: Include SQLite database if present
+        """
+        from fieldkit.backup import create_backup, format_backup_report
+
+        if output_path is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_path = self.store.data_dir / f"backup_{timestamp}.tar"
+
+        manifest = create_backup(
+            self.store.data_dir,
+            output_path,
+            include_sqlite=include_sqlite,
+            verbose=True,
+        )
+
+        print("\n" + format_backup_report(manifest))
+        return manifest
+
+    def cmd_backup_restore(self, input_path: Path, output_dir: Optional[Path] = None, verify: bool = True):
+        """
+        Restore data from a backup archive.
+
+        Args:
+            input_path: Path to backup tar file
+            output_dir: Directory to restore to (default: creates new dir)
+            verify: Verify file hashes after restore
+        """
+        from fieldkit.backup import restore_backup
+
+        if output_dir is None:
+            output_dir = self.store.data_dir.parent / f"restored_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        result = restore_backup(
+            input_path,
+            output_dir,
+            verify=verify,
+            verbose=True,
+        )
+
+        if result["success"]:
+            print(f"\nRestore successful to: {output_dir}")
+        else:
+            print(f"\nRestore completed with issues:")
+            for issue in result["issues"]:
+                print(f"  - {issue}")
+
+        return result
+
+    def cmd_backup_verify(self, backup_path: Path):
+        """
+        Verify a backup archive without extracting.
+
+        Args:
+            backup_path: Path to backup tar file
+        """
+        from fieldkit.backup import verify_backup
+
+        result = verify_backup(backup_path, verbose=True)
+        return result
+
+    def cmd_backup_list(self, directory: Optional[Path] = None):
+        """
+        List available backups in a directory.
+
+        Args:
+            directory: Directory to search (default: data_dir)
+        """
+        from fieldkit.backup import list_backups
+
+        if directory is None:
+            directory = self.store.data_dir
+
+        backups = list_backups(directory)
+
+        if not backups:
+            print("No backups found.")
+            return backups
+
+        print(f"Found {len(backups)} backup(s):\n")
+        for b in backups:
+            print(f"  {b['path']}")
+            print(f"    Created: {b['created_at']}")
+            print(f"    Type: {b['store_type']}")
+            if b.get('counts'):
+                counts_str = ", ".join(f"{k}: {v}" for k, v in b['counts'].items())
+                print(f"    Counts: {counts_str}")
+            print()
+
+        return backups
+
 
 def main():
     """Main entry point for the CLI."""
@@ -1386,6 +1707,51 @@ def main():
     p_export_cur = subparsers.add_parser("export:curated", help="Export curated projection JSON")
     p_export_cur.add_argument("--output", "-o", type=Path, default=None, help="Output file path")
 
+    # debug:stats (Sprint S01)
+    subparsers.add_parser("debug:stats", help="Display debug stats for current episode")
+
+    # eval:regression (Sprint S02)
+    p_eval_reg = subparsers.add_parser("eval:regression", help="Run regression tests against baselines")
+    p_eval_reg.add_argument(
+        "--update-baselines",
+        action="store_true",
+        help="Update baseline scores instead of testing",
+    )
+
+    # eval:dashboard (Sprint S02)
+    subparsers.add_parser("eval:dashboard", help="Display evaluation metrics dashboard")
+
+    # govern:report (Sprint S06)
+    subparsers.add_parser("govern:report", help="Display governance report with action suggestion")
+
+    # govern:bundle:propose (Sprint S06)
+    subparsers.add_parser("govern:bundle:propose", help="Detect and propose bundle candidates")
+
+    # govern:prune:plan (Sprint S06)
+    subparsers.add_parser("govern:prune:plan", help="Detect prune candidates and create plan")
+
+    # migrate:jsonl-to-sqlite (Sprint S10)
+    subparsers.add_parser("migrate:jsonl-to-sqlite", help="Migrate JSONL data to SQLite database")
+
+    # backup:create (Sprint S10)
+    p_backup_create = subparsers.add_parser("backup:create", help="Create backup archive")
+    p_backup_create.add_argument("--output", "-o", type=Path, default=None, help="Output path for backup file")
+    p_backup_create.add_argument("--no-sqlite", action="store_true", help="Exclude SQLite database from backup")
+
+    # backup:restore (Sprint S10)
+    p_backup_restore = subparsers.add_parser("backup:restore", help="Restore from backup archive")
+    p_backup_restore.add_argument("backup_path", type=Path, help="Path to backup tar file")
+    p_backup_restore.add_argument("--output-dir", "-o", type=Path, default=None, help="Directory to restore to")
+    p_backup_restore.add_argument("--no-verify", action="store_true", help="Skip hash verification")
+
+    # backup:verify (Sprint S10)
+    p_backup_verify = subparsers.add_parser("backup:verify", help="Verify backup archive")
+    p_backup_verify.add_argument("backup_path", type=Path, help="Path to backup tar file")
+
+    # backup:list (Sprint S10)
+    p_backup_list = subparsers.add_parser("backup:list", help="List available backups")
+    p_backup_list.add_argument("--directory", "-d", type=Path, default=None, help="Directory to search")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -1431,6 +1797,36 @@ def main():
         cli.cmd_export_episode(args.output)
     elif args.command == "export:curated":
         cli.cmd_export_curated(args.output)
+    elif args.command == "debug:stats":
+        cli.cmd_debug_stats()
+    elif args.command == "eval:regression":
+        cli.cmd_eval_regression(update_baselines=args.update_baselines)
+    elif args.command == "eval:dashboard":
+        cli.cmd_eval_dashboard()
+    elif args.command == "govern:report":
+        cli.cmd_govern_report()
+    elif args.command == "govern:bundle:propose":
+        cli.cmd_govern_bundle_propose()
+    elif args.command == "govern:prune:plan":
+        cli.cmd_govern_prune_plan()
+    # Sprint S10: Storage & Backup
+    elif args.command == "migrate:jsonl-to-sqlite":
+        cli.cmd_migrate_to_sqlite()
+    elif args.command == "backup:create":
+        cli.cmd_backup_create(
+            output_path=args.output,
+            include_sqlite=not args.no_sqlite,
+        )
+    elif args.command == "backup:restore":
+        cli.cmd_backup_restore(
+            input_path=args.backup_path,
+            output_dir=args.output_dir,
+            verify=not args.no_verify,
+        )
+    elif args.command == "backup:verify":
+        cli.cmd_backup_verify(args.backup_path)
+    elif args.command == "backup:list":
+        cli.cmd_backup_list(directory=args.directory)
 
 
 if __name__ == "__main__":

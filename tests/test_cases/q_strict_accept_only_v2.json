@@ -1,0 +1,19 @@
+{
+  "name": "q_strict_accept_only_v2",
+  "description": "Only clarify intent counts as acceptable",
+  "qdpi_stage": "Q",
+  "seed": {
+    "type": "golden_flow"
+  },
+  "subject_item_id": "dynamic:0",
+  "k": 4,
+  "acceptable_targets": {
+    "type": "intent_types",
+    "values": ["clarify"]
+  },
+  "expected_evidence": {
+    "min_with_evidence": 0,
+    "notes": "Current system does not produce evidence shards"
+  },
+  "notes": "Strict test case - only clarify intent counts as acceptable. Makes eval discriminative (MRR drops if clarify isn't ranked first)."
+}

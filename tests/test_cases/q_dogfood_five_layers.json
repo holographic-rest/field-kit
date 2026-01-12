@@ -1,0 +1,19 @@
+{
+  "name": "q_synthetic_strict_intent",
+  "description": "Queue-stage suggestions with strict intent matching (only 2 intents acceptable)",
+  "qdpi_stage": "Q",
+  "seed": {
+    "type": "golden_flow"
+  },
+  "subject_item_id": "dynamic:0",
+  "k": 4,
+  "acceptable_targets": {
+    "type": "intent_types",
+    "values": ["clarify", "concretize"]
+  },
+  "expected_evidence": {
+    "min_with_evidence": 0,
+    "notes": "Current system does not produce evidence shards"
+  },
+  "notes": "Tests with stricter intent requirements - only 2 of 4 standard intents are acceptable. Should result in lower recall."
+}

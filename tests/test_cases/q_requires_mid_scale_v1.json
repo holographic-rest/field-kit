@@ -1,0 +1,23 @@
+{
+  "name": "q_requires_mid_scale_v1",
+  "description": "Requires mid-scale evidence from architecture dataset. Tests multi-scale context.",
+  "qdpi_stage": "Q",
+  "seed": {
+    "type": "data_dir",
+    "data_dir": "prototype/data_demo_architecture"
+  },
+  "subject_item_id": "it_3B424DED62C74E7BA93935E7",
+  "k": 4,
+  "acceptable_targets": {
+    "type": "intent_types",
+    "values": ["clarify", "concretize", "connect", "test"]
+  },
+  "expected_evidence": {
+    "min_with_evidence": 1,
+    "notes": "Architecture dataset should produce mid-scale evidence shards"
+  },
+  "expected_scales": {
+    "must_include": ["mid"]
+  },
+  "notes": "Uses prototype/data_demo_architecture directly. Validates that multi-scale context is working."
+}

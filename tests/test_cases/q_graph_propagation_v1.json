@@ -1,0 +1,19 @@
+{
+  "name": "q_graph_propagation_v1",
+  "description": "Queue-stage test for graph propagation reranking (S05). Tests that graph distance features are computed and used in scoring.",
+  "qdpi_stage": "Q",
+  "seed": {
+    "type": "golden_flow"
+  },
+  "subject_item_id": "dynamic:0",
+  "k": 4,
+  "acceptable_targets": {
+    "type": "suggestion_indices",
+    "values": [1, 2, 3, 4]
+  },
+  "expected_graph_features": {
+    "graph_loaded": true,
+    "notes": "S05: Graph propagation should load items and bonds, compute distances, and influence scoring."
+  },
+  "notes": "This test validates S05 graph propagation. In a real scenario with deeper graph structure, closer nodes should rank higher. For the golden flow (minimal graph), this verifies the infrastructure works."
+}

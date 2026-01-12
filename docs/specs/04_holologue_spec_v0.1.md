@@ -10,7 +10,7 @@
 
 ## 2) Purpose
 
-Holologue is Field-Kit’s topology-aware **many → one** operator. It enables creation of a **single concrete, usable artifact Item** from a constellation of multiple Items (and optionally nearby graph context), beyond what unary Bond execution produces. Holologue supports workshop workflows (draft, edit, iterate) by generating a new persistent artifact with explicit provenance and an auditable event trail, and it provides a future path to publishing/curation by producing stable artifacts that can later be curated—without equating “Holologue output” with publishing or canonical truth.
+Holologue is Field-Kit's topology-aware **many → one** operator. It enables creation of a **single concrete, usable artifact Item** from a constellation of multiple Items (and optionally nearby graph context), beyond what unary Bond execution produces. Holologue supports workshop workflows (draft, edit, iterate) by generating a new persistent artifact with explicit provenance and an auditable event trail. Holologue must respect Queue anchoring: the selected constellation should typically include Queue Items, and the output artifact is considered an artifact, not chat. Holologue provides a future path to publishing/curation by producing stable artifacts that can later be curated—without equating "Holologue output" with publishing or canonical truth.
 
 ### Terms (v0.1)
 
@@ -43,8 +43,9 @@ Holologue is Field-Kit’s topology-aware **many → one** operator. It enables 
 * **Many → one artifact:** one run creates exactly one output Item.
 * **Not summary-by-default:** output is a concrete artifact, not a recap.
 * **Topology-aware:** reads Items plus optional nearby graph context (Bonds + provenance), not just raw text.
+* **Queue anchoring respected:** While Holologue can operate on any constellation, the system should prefer Queue Items in selections, and proposals should be hololink-like, derived from content handles.
 * **Provenance first-class:** output Item records `created_by="holologue"`, `holologue_event_id`, `selected_item_ids`, `artifact_kind`.
-* **Proposals are suggestions only:** any follow-on Bond prompts are emitted as events (not persisted Bonds) until user confirms.
+* **Proposals are suggestions only:** any follow-on Bond prompts are emitted as events (not persisted Bonds) until user confirms. Proposals should be hololink-like, not generic templates unless source content demands it.
 * **Auditability via QDPIEvents:** runs, outcomes, and failures are logged as append-only, immutable events.
 * **User confirmation governs persistence:** the user initiates the run; the system persists outputs with explicit ledger entries.
 * **Multi-purpose outputs:** no hardcoded tone; suitable for technical/spec, scientific, creative, planning.
@@ -282,6 +283,7 @@ Before persisting anything, apply a deterministic quality gate to the selected a
 After a successful completion (output persisted + `holologue.completed` logged), optionally generate **4 Bond prompt proposals**:
 
 * Each proposal is a content-shaped `prompt_text` that includes a noun/phrase from the artifact or one of the selected Items.
+* Proposals should be hololink-like, derived from content handles, not generic templates unless the source content explicitly demands it.
 * Proposals must be diverse; optional inferred `intent_type` labels may be included to diversify.
 * Proposals are emitted as a **QDPIEvent** only (`bond.proposals.presented`, `qdpi:"Q"`, `direction:"system→field"`), not as Bonds.
 

@@ -503,3 +503,68 @@ def generate_hololink_options(
         }
 
     return result
+
+
+# === S08: Batch Suggest (optional batching mode) ===
+
+def batch_suggest(
+    requests: List[Dict[str, Any]],
+    batch_size: int = 4,
+    return_debug: bool = False,
+) -> List[Dict[str, Any]]:
+    """
+    Process multiple hololink requests in batches.
+
+    S08: GPipe-style batching for improved throughput.
+
+    Each request should have:
+    - item_a: Dict with item data
+    - item_b: Dict with item data
+
+    Args:
+        requests: List of request dicts
+        batch_size: Batch size for dispatch (default 4)
+        return_debug: Include debug info in responses
+
+    Returns:
+        List of results in same order as requests
+    """
+    from .pipeline import batch_dispatch
+
+    def process_batch(batch: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Process a batch of requests."""
+        results = []
+        for req in batch:
+            item_a = req.get("item_a", {})
+            item_b = req.get("item_b", {})
+            result = generate_hololink_options(item_a, item_b, return_debug=return_debug)
+            results.append(result)
+        return results
+
+    return batch_dispatch(process_batch, requests, batch_size=batch_size)
+
+
+def batch_suggest_with_metrics(
+    requests: List[Dict[str, Any]],
+    batch_size: int = 4,
+    return_debug: bool = False,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """
+    Process requests with metrics collection.
+
+    Returns:
+        Tuple of (results, metrics_dict)
+    """
+    from .pipeline import measure_batch_dispatch
+
+    def process_batch(batch: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        results = []
+        for req in batch:
+            item_a = req.get("item_a", {})
+            item_b = req.get("item_b", {})
+            result = generate_hololink_options(item_a, item_b, return_debug=return_debug)
+            results.append(result)
+        return results
+
+    results, metrics = measure_batch_dispatch(process_batch, requests, batch_size=batch_size)
+    return results, metrics.to_dict()

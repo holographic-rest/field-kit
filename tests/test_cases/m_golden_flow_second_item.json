@@ -1,0 +1,19 @@
+{
+  "name": "m_no_suggestions_expected",
+  "description": "Monologue-stage test for item without suggestions (should handle gracefully)",
+  "qdpi_stage": "M",
+  "seed": {
+    "type": "golden_flow"
+  },
+  "subject_item_id": "dynamic:1",
+  "k": 4,
+  "acceptable_targets": {
+    "type": "suggestion_indices",
+    "values": []
+  },
+  "expected_evidence": {
+    "min_with_evidence": 0,
+    "notes": "No suggestions expected for this item"
+  },
+  "notes": "Tests handling of items without suggestions. The second item in golden flow doesn't have suggestions presented. Acceptable_targets is empty since 0 suggestions expected."
+}

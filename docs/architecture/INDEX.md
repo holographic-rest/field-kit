@@ -83,3 +83,23 @@ Layer 2 — Field Intelligence       (RAG, vector search, retrieval)
 Layer 1 — Models & Code            (Python, PyTorch, transformers)
 Layer 0 — Math & Metal             (vectors, matrices, GPUs)
 ```
+
+---
+
+## Sprint Architecture Documents
+
+These documents explain specific architectural decisions from sprints.
+
+| Document | Sprint | Purpose |
+|----------|--------|---------|
+| [POINTER_NAVIGATION.md](POINTER_NAVIGATION.md) | S03/S05 | Pointer-based navigation with candidate scoring |
+| [EVIDENCE_CITATIONS.md](EVIDENCE_CITATIONS.md) | S03/S04 | Evidence shards and multi-scale context |
+| [MULTI_SCALE_CONTEXT.md](MULTI_SCALE_CONTEXT.md) | S04 | Dilated context sampling at multiple temporal scales |
+| [GRAPH_PROPAGATION.md](GRAPH_PROPAGATION.md) | S05 | MPNN-style message passing for graph-aware reranking |
+| [COMPLEXITY_METRICS.md](COMPLEXITY_METRICS.md) | S06 | Coffee Automaton-inspired complexity measurement |
+| [MEMORY_GOVERNANCE.md](MEMORY_GOVERNANCE.md) | S06 | Suggest-only governance layer (bundle, prune, branch) |
+| [SESSION_STATE.md](SESSION_STATE.md) | S07 | RMC-style multi-slot session memory for continuity |
+| [PIPELINE_BATCHING.md](PIPELINE_BATCHING.md) | S08 | GPipe-style microbatching for improved throughput |
+| [MDL_CONTROLS.md](MDL_CONTROLS.md) | S09 | MDL scoring and structure-vs-noise gates |
+| [STORAGE_SQLITE.md](STORAGE_SQLITE.md) | S10 | SQLite storage layer with FTS5 |
+| [BACKUP_EXPORT.md](BACKUP_EXPORT.md) | S10 | Backup, export, and restore functionality |

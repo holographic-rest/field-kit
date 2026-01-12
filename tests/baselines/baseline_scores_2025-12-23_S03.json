@@ -1,0 +1,305 @@
+{
+  "generated_at": "2025-12-23T21:42:04.070815",
+  "test_cases": {
+    "q_golden_flow_v1": {
+      "system": {
+        "test_case_name": "q_golden_flow_v1",
+        "mrr_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "golden_flow_continuation": 1.0,
+        "ecr": 1.0,
+        "arr": 1.0,
+        "evidence_trace_presence": 1.0,
+        "tri_at_k": 0.1206,
+        "hubness": 0.25,
+        "k": 4,
+        "total_suggestions": 4,
+        "acceptable_count": 4
+      },
+      "baselines": {
+        "lexical": {
+          "test_case_name": "q_golden_flow_v1",
+          "mrr_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "golden_flow_continuation": 1.0,
+          "ecr": 1.0,
+          "arr": 1.0,
+          "evidence_trace_presence": 1.0,
+          "tri_at_k": 0.1206,
+          "hubness": 0.25,
+          "k": 4,
+          "total_suggestions": 4,
+          "acceptable_count": 4
+        },
+        "random": {
+          "test_case_name": "q_golden_flow_v1",
+          "mrr_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "golden_flow_continuation": 1.0,
+          "ecr": 1.0,
+          "arr": 1.0,
+          "evidence_trace_presence": 1.0,
+          "tri_at_k": 0.1206,
+          "hubness": 0.25,
+          "k": 4,
+          "total_suggestions": 4,
+          "acceptable_count": 4
+        },
+        "recency": {
+          "test_case_name": "q_golden_flow_v1",
+          "mrr_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "golden_flow_continuation": 1.0,
+          "ecr": 1.0,
+          "arr": 1.0,
+          "evidence_trace_presence": 1.0,
+          "tri_at_k": 0.1206,
+          "hubness": 0.25,
+          "k": 4,
+          "total_suggestions": 4,
+          "acceptable_count": 4
+        }
+      }
+    },
+    "m_no_suggestions_expected": {
+      "system": {
+        "test_case_name": "m_no_suggestions_expected",
+        "mrr_at_k": 0.0,
+        "recall_at_k": 0.0,
+        "golden_flow_continuation": 0.0,
+        "ecr": 0.0,
+        "arr": null,
+        "evidence_trace_presence": 0.0,
+        "tri_at_k": 0.0,
+        "hubness": 0.0,
+        "k": 4,
+        "total_suggestions": 0,
+        "acceptable_count": 0
+      },
+      "baselines": {
+        "lexical": {
+          "test_case_name": "m_no_suggestions_expected",
+          "mrr_at_k": 0.0,
+          "recall_at_k": 0.0,
+          "golden_flow_continuation": 0.0,
+          "ecr": 0.0,
+          "arr": null,
+          "evidence_trace_presence": 0.0,
+          "tri_at_k": 0.0,
+          "hubness": 0.0,
+          "k": 4,
+          "total_suggestions": 0,
+          "acceptable_count": 0
+        },
+        "random": {
+          "test_case_name": "m_no_suggestions_expected",
+          "mrr_at_k": 0.0,
+          "recall_at_k": 0.0,
+          "golden_flow_continuation": 0.0,
+          "ecr": 0.0,
+          "arr": null,
+          "evidence_trace_presence": 0.0,
+          "tri_at_k": 0.0,
+          "hubness": 0.0,
+          "k": 4,
+          "total_suggestions": 0,
+          "acceptable_count": 0
+        },
+        "recency": {
+          "test_case_name": "m_no_suggestions_expected",
+          "mrr_at_k": 0.0,
+          "recall_at_k": 0.0,
+          "golden_flow_continuation": 0.0,
+          "ecr": 0.0,
+          "arr": null,
+          "evidence_trace_presence": 0.0,
+          "tri_at_k": 0.0,
+          "hubness": 0.0,
+          "k": 4,
+          "total_suggestions": 0,
+          "acceptable_count": 0
+        }
+      }
+    },
+    "q_synthetic_field_overview": {
+      "system": {
+        "test_case_name": "q_synthetic_field_overview",
+        "mrr_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "golden_flow_continuation": 1.0,
+        "ecr": 1.0,
+        "arr": 1.0,
+        "evidence_trace_presence": 1.0,
+        "tri_at_k": 0.127,
+        "hubness": 0.25,
+        "k": 4,
+        "total_suggestions": 4,
+        "acceptable_count": 4
+      },
+      "baselines": {
+        "lexical": {
+          "test_case_name": "q_synthetic_field_overview",
+          "mrr_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "golden_flow_continuation": 1.0,
+          "ecr": 1.0,
+          "arr": 1.0,
+          "evidence_trace_presence": 1.0,
+          "tri_at_k": 0.127,
+          "hubness": 0.25,
+          "k": 4,
+          "total_suggestions": 4,
+          "acceptable_count": 4
+        },
+        "random": {
+          "test_case_name": "q_synthetic_field_overview",
+          "mrr_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "golden_flow_continuation": 1.0,
+          "ecr": 1.0,
+          "arr": 1.0,
+          "evidence_trace_presence": 1.0,
+          "tri_at_k": 0.127,
+          "hubness": 0.25,
+          "k": 4,
+          "total_suggestions": 4,
+          "acceptable_count": 4
+        },
+        "recency": {
+          "test_case_name": "q_synthetic_field_overview",
+          "mrr_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "golden_flow_continuation": 1.0,
+          "ecr": 1.0,
+          "arr": 1.0,
+          "evidence_trace_presence": 1.0,
+          "tri_at_k": 0.127,
+          "hubness": 0.25,
+          "k": 4,
+          "total_suggestions": 4,
+          "acceptable_count": 4
+        }
+      }
+    },
+    "q_synthetic_strict_intent": {
+      "system": {
+        "test_case_name": "q_synthetic_strict_intent",
+        "mrr_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "golden_flow_continuation": 1.0,
+        "ecr": 1.0,
+        "arr": 1.0,
+        "evidence_trace_presence": 1.0,
+        "tri_at_k": 0.1272,
+        "hubness": 0.25,
+        "k": 4,
+        "total_suggestions": 4,
+        "acceptable_count": 2
+      },
+      "baselines": {
+        "lexical": {
+          "test_case_name": "q_synthetic_strict_intent",
+          "mrr_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "golden_flow_continuation": 1.0,
+          "ecr": 1.0,
+          "arr": 1.0,
+          "evidence_trace_presence": 1.0,
+          "tri_at_k": 0.1272,
+          "hubness": 0.25,
+          "k": 4,
+          "total_suggestions": 4,
+          "acceptable_count": 2
+        },
+        "random": {
+          "test_case_name": "q_synthetic_strict_intent",
+          "mrr_at_k": 0.5,
+          "recall_at_k": 1.0,
+          "golden_flow_continuation": 0.0,
+          "ecr": 1.0,
+          "arr": 1.0,
+          "evidence_trace_presence": 1.0,
+          "tri_at_k": 0.1272,
+          "hubness": 0.25,
+          "k": 4,
+          "total_suggestions": 4,
+          "acceptable_count": 2
+        },
+        "recency": {
+          "test_case_name": "q_synthetic_strict_intent",
+          "mrr_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "golden_flow_continuation": 1.0,
+          "ecr": 1.0,
+          "arr": 1.0,
+          "evidence_trace_presence": 1.0,
+          "tri_at_k": 0.1272,
+          "hubness": 0.25,
+          "k": 4,
+          "total_suggestions": 4,
+          "acceptable_count": 2
+        }
+      }
+    },
+    "q_synthetic_top1_only": {
+      "system": {
+        "test_case_name": "q_synthetic_top1_only",
+        "mrr_at_k": 1.0,
+        "recall_at_k": 1.0,
+        "golden_flow_continuation": 1.0,
+        "ecr": 1.0,
+        "arr": 1.0,
+        "evidence_trace_presence": 1.0,
+        "tri_at_k": 0.1252,
+        "hubness": 0.25,
+        "k": 4,
+        "total_suggestions": 4,
+        "acceptable_count": 1
+      },
+      "baselines": {
+        "lexical": {
+          "test_case_name": "q_synthetic_top1_only",
+          "mrr_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "golden_flow_continuation": 1.0,
+          "ecr": 1.0,
+          "arr": 1.0,
+          "evidence_trace_presence": 1.0,
+          "tri_at_k": 0.1252,
+          "hubness": 0.25,
+          "k": 4,
+          "total_suggestions": 4,
+          "acceptable_count": 1
+        },
+        "random": {
+          "test_case_name": "q_synthetic_top1_only",
+          "mrr_at_k": 0.25,
+          "recall_at_k": 1.0,
+          "golden_flow_continuation": 0.0,
+          "ecr": 1.0,
+          "arr": 1.0,
+          "evidence_trace_presence": 1.0,
+          "tri_at_k": 0.1252,
+          "hubness": 0.25,
+          "k": 4,
+          "total_suggestions": 4,
+          "acceptable_count": 1
+        },
+        "recency": {
+          "test_case_name": "q_synthetic_top1_only",
+          "mrr_at_k": 1.0,
+          "recall_at_k": 1.0,
+          "golden_flow_continuation": 1.0,
+          "ecr": 1.0,
+          "arr": 1.0,
+          "evidence_trace_presence": 1.0,
+          "tri_at_k": 0.1252,
+          "hubness": 0.25,
+          "k": 4,
+          "total_suggestions": 4,
+          "acceptable_count": 1
+        }
+      }
+    }
+  }
+}

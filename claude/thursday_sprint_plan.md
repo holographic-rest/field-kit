@@ -1,192 +1,226 @@
-# thursday_sprint_plan.md — Field-Kit v0.1 Build Night (Claude Code)
+# thursday_sprint_plan.md — Queue Lattice Sprint v0.1 (Claude Code)
 
-**Date:** Thursday (Build Night)  
-**Goal:** Ship the **Bootstrap Floor** so the system can execute the **Demo Golden Flow v0.1** once (even ugly).
+**Repo:** field-kit  
+**Status:** active sprint plan  
+**Goal:** make the system *coherent* under the new ontology: **Queue Items + Hololinks + Hololoops (bonds)**, with suggestions that are **content-derived** (not cookie-cutter templates).
 
-**Source of truth:**  
-- `/docs/specs/*.md`  
-- `CLAUDE.md` (guardrails)  
-- `prototype/README.md` (acceptance + order)
-
-**Hard rule:** Do NOT rename schemas/event names or invent new objects/features. Follow the specs.
+This sprint is the “reset of reality.”  
+We are no longer trying to make the previous Golden Flow feel good. We are implementing the **Queue Lattice** (Spec 09) as the new foundation.
 
 ---
 
-## 0) What “done tonight” means (minimum win)
+## 0) Source of truth (read first)
 
-By end of night, we can run a **headless Golden Flow** (CLI or script) that proves:
+**Primary:** `/docs/specs/09_queue_lattice_v0.1.md`  
+**Then:** `/docs/specs/01_*.md` … `/docs/specs/08_*.md` (as rewritten by Composer)  
+**Guardrails:** `/CLAUDE.md`
 
-- local store exists
-- Episode 0 exists
-- can create 2 Q Items
-- can create + execute 2 Bonds (Q→M and Q→D) with lineage
-- can run Holologue (2+ Items) and produce 1 H Item
-- can open a Ledger view and see ordered events
-- credits.delta can be appended + derived balance computed (if enabled)
-
-UI can be deferred. Tonight is about correctness + persistence.
+If any older spec contradicts `09`, follow `09` and leave a short note (doc + section) in the PR/commit message.
 
 ---
 
-## 1) Work plan (strict pass order)
+## 1) Definition of “done” for this sprint (minimum win)
 
-### Pass 1 — Storage + Event Log (append-only)
+By end of sprint, the prototype supports this flow end-to-end in **UI and CLI**:
+
+1) User creates **Queue Item Q1** (“Create anything” composer)  
+2) User creates **Queue Item Q2**  
+3) System immediately presents **4 hololink candidates Q1→Q2** and **4 hololink candidates Q2→Q1**  
+4) User selects **one** hololink each direction → forms a **hololoop** (a bonded loop)  
+5) Ledger shows:
+   - the two Items persisted
+   - the hololinks selected + the hololoop recorded (per spec)
+   - canonical event names only (unless Spec 09 explicitly changed them)
+6) Suggestions are **actually based on content**:
+   - they quote/point to *real handles* from the source item
+   - they “aim” into the target item (not generic “expand X…” templates)
+   - they are readable in full (no ellipsis-only chips)
+
+**Important:** This sprint does not need Monologue/Dialogue/Holologue generation to be perfect or even present—unless Spec 09 explicitly requires it. We’re building the lattice first.
+
+---
+
+## 2) Non-negotiable UI rules (this sprint)
+
+### A) Item creation ≠ bond authoring
+- “Create Item” composer mints an Item (Queue by default).
+- Bond/hololink authoring is separate and always targets existing Items.
+
+### B) No Q/M/D/H dropdown for Item creation
+- Creating an Item defaults to **Queue**.
+- If types exist at all, they are derived from how an Item was produced (e.g., generated output), not chosen by user at creation time.
+
+### C) Gating (Queue-first)
+After creating Q1:
+- user can only create Q2 (nothing else).
+After creating Q2:
+- user must pick hololinks (Q1→Q2 and Q2→Q1) to form the first hololoop before proceeding.
+(Unless Spec 09 allows skipping; default is strict gating.)
+
+---
+
+## 3) Sprint work plan (Pass order)
+
+### PASS 1 — Data model + storage for Hololinks / Hololoops
+
+**Goal:** represent hololinks and hololoops in data in a way that is:
+- faithful to Spec 09
+- testable in JSONL
+- visible in Ledger
+
+**Rules:**
+- Do **not** invent new structures unless Spec 09 requires them.
+- Prefer minimal schema extension:
+  - either add optional fields to existing objects, or
+  - introduce a small new object type only if spec demands it.
+
 **Deliverables:**
-- Local store directory created (e.g., `prototype/data/`)
-- JSONL files exist (or SQLite if chosen)
-- Event append function enforces `(episode_id, seq)` monotonic ordering
-
-**Implement:**
-- `prototype/src/store/` (or similar)
-  - `append_event(qdpi_event)`
-  - `load_events(episode_id?)`
-  - `upsert_snapshot(object_type, object)` (Items/Bonds/Episodes/Networks)
-  - `load_snapshots(object_type, filters?)`
+- Updated schema(s) in `src/fieldkit/schemas.py`
+- Store support in `src/fieldkit/store_jsonl.py`
+- Ledger rendering support in `src/cli.py ledger:open` and UI ledger tab
 
 **Run check:**
-- Create an event via code and confirm it appends to `qdpi_events.jsonl`
-- Reload and confirm order is preserved
+- create Q1/Q2 via CLI
+- create hololinks/hololoop via CLI
+- ledger prints them clearly
 
 ---
 
-### Pass 2 — Init + Create Item + Ledger (readback)
+### PASS 2 — Hololink suggestion generator (“context transformer”)
+
+**Goal:** generate hololink candidates that are **content-derived**, not templates.
+
+**Core behavior:**
+Given two Items A (source) and B (target), generate:
+- 4 candidate hololinks **A→B**
+- 4 candidate hololinks **B→A**
+
+**Hard requirements for each hololink sentence:**
+- references (quotes or near-quotes) a *handle* from the source Item  
+- points into the target Item by referencing at least one target handle or concept  
+- reads like a “hyperlink expanded into a sentence” (question or statement)
+- not “expand X into a checklist…” style boilerplate
+
+**Implementation approach (required pipeline):**
+1) **Parse item content into handles** (source + target)
+   - Prefer: headings, bold spans, bullet headers, named entities, key noun phrases
+   - Fallback: first sentence fragments, top-scoring ngrams
+2) **Select 4 high-salience handles** from the source (diverse)
+3) For each handle, craft a hololink sentence that:
+   - includes the source handle (verbatim or close)
+   - includes one target handle (verbatim or close)
+   - uses one of several rhetorical frames (question, inversion, implication, contrast, identity, scope)
+4) Ensure **dedupe**: no two hololinks are near-identical
+
+**Important:** Frames may exist internally, but must not appear as “Clarify/Contrast/etc.” in the text shown to the user.
+
 **Deliverables:**
-- `init` command (or script) that creates:
-  - Network
-  - Episode 0
-  - events: `app.first_run.started`, `episode.created`, optional `credits.delta(seed)`, `store.commit`
-- `item:create` command that persists an Item (Q default) and logs:
-  - `item.created`
-  - optional `credits.delta(item_created)`
-  - `store.commit`
-- `ledger:open` command that prints:
-  - Objects counts (Items/Bonds/Episodes/Network)
-  - Events (name, qdpi, direction, seq)
-
-**Run check:**
-1. `init`
-2. `item:create` twice
-3. `ledger:open` shows 2 items + events appended in order
+- `src/fieldkit/hololinks.py` (or similar) implementing:
+  - `extract_handles(text) -> list[str]`
+  - `suggest_hololinks(a_text, b_text) -> list[str]` (length 4)
+- tests:
+  - deterministic handle extraction
+  - suggestions differ when content differs
+  - suggestions quote real handles
 
 ---
 
-### Pass 3 — Create Bond (draft) + Run Bond (success path)
+### PASS 3 — UI integration (wrapper feel, lattice behavior)
+
+**Goal:** UI behaves like lattice, with wrapper-level visual simplicity.
+
+**UI requirements:**
+- Landing: “Create anything” composer
+- After Item created:
+  - Item appears in feed
+  - immediately show hololink suggestions **below the item** (not hidden in a side panel)
+  - show 4 options (full text visible; wrap lines; no truncation)
+- After 2 Items exist:
+  - show two suggestion stacks:
+    - “From Q1 → Q2 (choose 1)”
+    - “From Q2 → Q1 (choose 1)”
+  - once both chosen, display “Hololoop created” and unlock creation of next Item
+
 **Deliverables:**
-- `bond:create` creates draft Bond with:
-  - `status:"draft"`, `output_item_id:null`, `input_item_ids`, `prompt_text`
-  - event: `bond.draft_created` + `store.commit`
-- `bond:run` success path:
-  - event: `bond.run_requested`
-  - optional `credits.delta(bond_run_spend)`
-  - create output Item (M or D)
-  - update Bond to executed + set `output_item_id`
-  - event: `bond.executed`
-  - optional `credits.delta(bond_executed_reward)`
-  - `store.commit`
+- Update `prototype/ui/` to support this flow
+- Ensure chips/buttons wrap text and remain readable
 
 **Run check:**
-- Create Bond from Item 1, run it, see:
-  - Bond status executed
-  - output item exists with provenance
-  - ledger shows run_requested before executed
+- Start UI
+- Create 2 items
+- Select hololinks both directions
+- See hololoop confirmed
+- Ledger reflects it
 
 ---
 
-### Pass 4 — Holologue (success path) + Proposals (events-only)
+### PASS 4 — CLI parity + acceptance tests
+
+**Goal:** everything done in UI should also be doable headlessly.
+
 **Deliverables:**
-- `holologue:run` requires 2+ items:
-  - event: `holologue.run_requested`
-  - optional `credits.delta(holologue_run_spend)`
-  - create ONE output Item type H with provenance (holologue)
-  - event: `holologue.completed`
-  - optional `credits.delta(holologue_completed_reward)`
-  - optional `bond.proposals.presented` (events-only; no bonds created)
-  - `store.commit`
-
-**Validation failure behavior:**
-- If <2 items: log `holologue.validation_failed` and do nothing else
-
-**Run check:**
-- run holologue on two Q items → see one H item, and proposals event optionally
+- CLI commands:
+  - `item:create` (Queue default, no type dropdown)
+  - `hololink:suggest --from <id> --to <id>` (returns 4)
+  - `hololink:select --from <id> --to <id> --index <0-3>` (stores selected)
+  - `hololoop:create --a <id> --b <id>` (or implicit when both directions selected)
+- New test:
+  - `prototype/scripts/test_sprint_queue_lattice.py` covering:
+    - Q1, Q2 created
+    - suggestions produced and contain real handles
+    - selecting each direction creates hololoop
+    - ledger shows correct structures/events
+    - rerun is repeatable with `--fresh`
 
 ---
 
-### Pass 5 — Credits (simulation) as derived view
-**Deliverables:**
-- `credits.delta` event writer (already used above)
-- Derived balance function:
-  - compute balance from seed + deltas in event stream
-- Ledger shows credits events and current balance
+### PASS 5 — Git hygiene + commit
 
-**Run check:**
-- After Golden Flow run, derived balance equals expected (73) on clean success path if policy matches specs
+- Confirm no runtime JSONL committed
+- Ensure new scripts (tests) are committed
+- Commit message:
+  - `sprint: queue lattice v0.1 (hololinks + hololoops + content-derived suggestions)`
 
 ---
 
-### Pass 6 — Golden Flow script (automated acceptance)
-**Deliverable:**
-- `prototype/scripts/run_golden_flow.(ts|js|py)` that:
-  - runs: init → tutorial.started → create 2 items → suggestions event → bond 1 run → bond 2 run → holologue run → proposals event → ledger.opened
-  - asserts:
-    - Items >= 5
-    - Bonds >= 2 (executed)
-    - Event ordering constraints hold
-    - Optional: credits final == 73 (if enabled)
+## 4) What can be stubbed (allowed)
 
-**Run check:**
-- One command runs the full flow and exits 0
+- Any “AI generation” beyond hololink suggestions can be stubbed.
+- Hololink suggestion quality should be achieved via the pipeline above; an LLM is optional.
+- If LLM is used:
+  - key must remain in `.env` and gitignored
+  - implement an adapter interface: `stub` vs `openai` vs `local`
+  - default to stub if key missing
 
 ---
 
-## 2) Implementation notes (do NOT drift)
+## 5) Stop conditions (do not improvise)
 
-### Canonical event names only
-Do NOT create `run.started`, `proposal.suggested`, etc.  
-UI phases are UI-only; this is headless tonight.
+Stop and ask Brennan if:
+- Spec 09 requires new event names beyond the canonical list
+- Spec 09 requires a new object type that conflicts with existing storage assumptions
+- UI cannot satisfy gating without breaking core usability
 
-### Proposals are events-only
-Suggestions/proposals are logged but do not create bonds until explicitly created.
-
-### No persisted placeholder output Items
-If you want “never dead air” later, use UI-only ephemeral cards. For headless prototype, skip.
-
----
-
-## 3) Minimal scaffolding choices (pick one and stick)
-
-**Preferred:** Node/TS (or Bun/TS) CLI + JSONL store  
-**Alternative:** Python CLI + JSONL store  
-**Avoid tonight:** full UI, complex frameworks, plugins, auth, hosting
+When blocked:
+1) cite doc + section
+2) propose smallest fix
+3) wait
 
 ---
 
-## 4) Deliverables to commit tonight
+## 6) Commands Brennan should run after each pass
 
-1. `CLAUDE.md` (already created)
-2. `prototype/README.md` (already created)
-3. `prototype/src/...` implementation for storage + core actions
-4. `prototype/scripts/run_golden_flow.*`
-5. A single `prototype/CHANGELOG.md` entry (today) with what works
+After each pass, provide:
+- exact commands to run
+- expected output snippets
 
-**Commit message suggestion:**  
-`prototype: bootstrap floor (jsonl + events + golden flow script)`
-
----
-
-## 5) If blocked (how to proceed)
-
-If a spec ambiguity appears:
-1) cite the exact doc + section
-2) propose the smallest resolution
-3) do NOT invent a new object/event name
-4) prefer whatever makes Golden Flow executable
+Minimum final checks:
+- `python3 prototype/ui/app.py`
+- `python3 prototype/scripts/test_sprint_queue_lattice.py`
+- `python3 prototype/scripts/run_golden_flow.py --fresh` (only if the rewritten spec suite still expects it)
 
 ---
 
-## 6) Claude kickoff instruction (paste into Claude Code)
+## 7) Sprint kickoff instruction to Claude Code (paste into Claude)
 
-“Implement the Bootstrap Floor in Pass order 1→6 described in `thursday_sprint_plan.md`.  
-Use JSONL storage unless you have a strong reason not to.  
-Do not invent new event names.  
-After each pass, provide the exact commands to run and the expected output.  
-Stop if a spec contradiction is found and report it with doc+section.”
+“Implement Queue Lattice v0.1 as defined in `/docs/specs/09_queue_lattice_v0.1.md` and the rewritten spec suite. Follow the Pass order in this file. Do not collapse Item creation and Bond/Hololink authoring. Suggestions must be content-derived hololink sentences (not templates), readable in full, and must differ for different inputs. After each pass, give me the exact command(s) to run and the expected output. Stop if Spec 09 requires new event names or object types and cite the exact section.”
